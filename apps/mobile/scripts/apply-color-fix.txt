@@ -1,0 +1,68 @@
+# Automated Color Fix Instructions
+# This file documents the systematic replacement of Apple red with brand purple
+
+## Replacement Rules
+1. Replace #FF3B5C with #7C3AED (case insensitive)
+2. Replace rgba(255, 59, 92, X) with rgba(124, 58, 237, X) for all alpha values
+
+## Files Requiring Fix (35 total)
+
+### Priority 1: High-visibility components (User-facing UI)
+- components/FeedScreen/SearchModal.jsx
+- components/CreateScreen/VideoPreviewScreen.jsx
+- components/SellerProfile/ActionButtons.jsx
+- components/SellerProfile/LoadingState.jsx
+- components/SellerProfile/ProfileAvatar.jsx
+- components/ProfileScreen/GuestView.jsx
+
+### Priority 2: Product & Shopping
+- components/ProductDetail/ImageIndicators.jsx
+- components/FeedProductSheet.jsx
+- components/BoostToFeedModal.jsx
+- components/SizeGuideModal.jsx
+- components/LogisticsSuccessModal.jsx
+- components/FoodHub/TodaysSpecials.jsx
+
+### Priority 3: Profile & Content Tabs
+- components/SellerProfile/TabContent/ShowcaseTab.jsx
+- components/SellerProfile/TabContent/ShopTab.jsx
+- components/SellerProfile/TabContent/PostsTab.jsx
+- components/ProfileScreen/TabContent/ShopTab.jsx
+- components/ProfileScreen/TabContent/PrivateTab.jsx
+- components/ProfileScreen/TabContent/PostsTab.jsx
+- components/ProfileScreen/TabContent/LikesTab.jsx
+
+### Priority 4: App Screens
+- app/order-details.jsx
+- app/delivery-zones.jsx
+- app/inbox.jsx
+- app/browse-sellers.jsx
+- app/chat.jsx
+- app/support-chat.jsx
+- app/wallet.jsx
+- app/verify-email.jsx
+- app/edit-profile.jsx
+- app/live/watch.jsx
+- app/live/host.jsx
+- app/seller/dashboard.jsx
+- app/affiliate/dashboard.jsx
+
+## Implementation Strategy
+Use semantic_edit for each file with targeted replacements:
+1. Identify all color instances via grep
+2. Replace hex values: #FF3B5C → #7C3AED
+3. Replace rgba values: rgba(255, 59, 92, X) → rgba(124, 58, 237, X)
+4. Verify no instances remain
+
+## Verification
+After all fixes:
+```bash
+grep -r "#FF3B5C\|rgba(255, 59, 92" apps/mobile/src --include="*.jsx" --include="*.js"
+```
+Expected: 0 matches (except in documentation/comment files)
+
+## App Store Compliance
+This fix ensures compliance with:
+- **Guideline 5.2.5**: Design - Apple Design Resources
+- Removes all instances of Apple's signature red color
+- Establishes distinct brand identity with purple (#7C3AED)

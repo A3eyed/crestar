@@ -1,0 +1,123 @@
+{
+  "expo": {
+    "name": "Crestar",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/4aaaab90-1247-4548-87c4-ddb1aa451994.png",
+    "userInterfaceStyle": "automatic",
+    "autolinking": {
+      "exclude": [
+        "react-native-maps",
+        "@shopify/react-native-skia",
+        "react-native-graph",
+        "@react-native-community/slider",
+        "@react-native-picker/picker",
+        "react-native-google-mobile-ads"
+      ]
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "NSCameraUsageDescription": "Crestar uses your camera only when you choose to record a shoppable video, go live, or take a photo for your profile or a product listing.",
+        "NSMicrophoneUsageDescription": "Crestar uses your microphone only while you are recording a video or streaming live, so your videos have sound.",
+        "NSPhotoLibraryUsageDescription": "Crestar needs access to your photo library so you can pick photos and videos to post, to add to your product listings, or to use as your profile picture.",
+        "NSPhotoLibraryAddUsageDescription": "Crestar saves videos and photos you create in the app to your photo library when you ask it to.",
+        "NSLocationWhenInUseUsageDescription": "Crestar uses your location only while the app is open: to fill in your delivery address, show restaurants and sellers near you in FoodHub, set up seller delivery zones, and let deliverers share their position while they are viewing an active delivery. Crestar never collects your location in the background or when the app is closed.",
+        "NSContactsUsageDescription": "We need access to your contacts to use contacts.",
+        "NSCalendarsUsageDescription": "We need access to your notifications to help you stay updated.",
+        "NSCalendarsFullAccessUsageDescription": "We need access to your calendar to help you stay updated.",
+        "NSRemindersUsageDescription": "We need access to your reminders to help you stay updated.",
+        "NSRemindersFullAccessUsageDescription": "We need access to your reminders to help you stay updated.",
+        "NSLocationAlwaysUsageDescription": "We need access to your location to help you find your way.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need access to your location to help you find your way.",
+        "NSSpeechRecognitionUsageDescription": "This app does not use your speech recognition."
+      },
+      "bundleIdentifier": "com.crestar.hq"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/4aaaab90-1247-4548-87c4-ddb1aa451994.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "package": "com.crestar.hq"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "sitemap": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/d00bc126-bf02-4cc9-b391-077b3b972bf1.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000",
+          "dark": {
+            "image": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/d00bc126-bf02-4cc9-b391-077b3b972bf1.png",
+            "imageWidth": 200,
+            "resizeMode": "contain",
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "expo-audio",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": true
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      "expo-web-browser",
+      "@sentry/react-native/expo",
+      [
+        "expo-notifications",
+        {
+          "color": "#D4AF37"
+        }
+      ]
+    ],
+    "web": {
+      "bundler": "metro",
+      "favicon": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/4aaaab90-1247-4548-87c4-ddb1aa451994.png"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false,
+        "sitemap": false
+      },
+      "eas": {
+        "projectId": "0e7ed2f7-a8a4-4d5c-86c2-951536c05e3e"
+      }
+    },
+    "slug": "22eaf7fd-f570-4d68-87e3-8739d6f135f5",
+    "scheme": "crestar.22eaf7fd-f570-4d68-87e3-8739d6f135f5"
+  }
+}

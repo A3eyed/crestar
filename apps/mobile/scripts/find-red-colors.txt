@@ -1,0 +1,83 @@
+# Script to find all remaining instances of Apple-red color in the codebase
+# Copy these commands and run them from the /apps/mobile directory
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SEARCH COMMANDS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Search for #FF3B5C (hex format)
+grep -rn "#FF3B5C" src/
+
+# Search for rgba(255, 59, 92 (rgba format with spaces)
+grep -rn "rgba(255, 59, 92" src/
+
+# Search for rgba(255,59,92 (rgba format without spaces)
+grep -rn "rgba(255,59,92" src/
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# AUTOMATED FIX COMMANDS (macOS/Linux)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Replace hex format
+find src/ -type f \( -name '*.jsx' -o -name '*.js' \) -exec sed -i '' 's/#FF3B5C/#7C3AED/g' {} +
+
+# Replace rgba with spaces
+find src/ -type f \( -name '*.jsx' -o -name '*.js' \) -exec sed -i '' 's/rgba(255, 59, 92/rgba(124, 58, 237/g' {} +
+
+# Replace rgba without spaces
+find src/ -type f \( -name '*.jsx' -o -name '*.js' \) -exec sed -i '' 's/rgba(255,59,92/rgba(124,58,237/g' {} +
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# AUTOMATED FIX COMMANDS (Linux without macOS sed)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Replace hex format
+find src/ -type f \( -name '*.jsx' -o -name '*.js' \) -exec sed -i 's/#FF3B5C/#7C3AED/g' {} +
+
+# Replace rgba with spaces
+find src/ -type f \( -name '*.jsx' -o -name '*.js' \) -exec sed -i 's/rgba(255, 59, 92/rgba(124, 58, 237/g' {} +
+
+# Replace rgba without spaces
+find src/ -type f \( -name '*.jsx' -o -name '*.js' \) -exec sed -i 's/rgba(255,59,92/rgba(124,58,237/g' {} +
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# VERIFICATION
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# After running the fix commands, verify no instances remain:
+grep -r "#FF3B5C" src/ && echo "⚠️  Still found instances" || echo "✅ All hex instances fixed"
+grep -r "rgba(255, 59, 92" src/ && echo "⚠️  Still found instances" || echo "✅ All rgba (with spaces) instances fixed"
+grep -r "rgba(255,59,92" src/ && echo "⚠️  Still found instances" || echo "✅ All rgba (no spaces) instances fixed"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ALTERNATIVE: VS CODE FIND & REPLACE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Open VS Code, press Cmd+Shift+F (Mac) or Ctrl+Shift+H (Windows/Linux)
+# Enable "Use Regular Expression" mode (.*) button
+
+# Find & Replace #1:
+# Find:    #FF3B5C
+# Replace: #7C3AED
+# Files:   apps/mobile/src/**/*.{js,jsx}
+
+# Find & Replace #2:
+# Find:    rgba\(255,\s*59,\s*92
+# Replace: rgba(124, 58, 237
+# Files:   apps/mobile/src/**/*.{js,jsx}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# FILES KNOWN TO CONTAIN OLD COLOR (from grep)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# /apps/mobile/src/app/browse-sellers.jsx
+# /apps/mobile/src/app/chat.jsx
+# /apps/mobile/src/app/delivery-zones.jsx
+# /apps/mobile/src/app/inbox.jsx
+# /apps/mobile/src/app/monetization-center.jsx
+# /apps/mobile/src/app/order-details.jsx
+# /apps/mobile/src/app/support-chat.jsx
+# /apps/mobile/src/app/live/watch.jsx
+# /apps/mobile/src/app/seller/dashboard.jsx
+
+# Plus potentially more in components and other directories
