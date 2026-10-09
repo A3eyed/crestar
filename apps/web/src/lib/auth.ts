@@ -17,12 +17,10 @@ const pool = new Pool({
 
 // Origins we accept auth requests from
 const trustedOrigins = [
+  'https://crestarhq.com',
+  'https://www.crestarhq.com',
   process.env.BETTER_AUTH_URL,
   process.env.EXPO_PUBLIC_PROXY_BASE_URL,
-  process.env.NEXT_PUBLIC_CREATE_BASE_URL,
-  process.env.NEXT_PUBLIC_CREATE_APP_URL,
-  process.env.NEXT_PUBLIC_CREATE_HOST ? `https://${process.env.NEXT_PUBLIC_CREATE_HOST}` : null,
-  // Platform-provided comma-separated list of additional trusted origins
   ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(',').map((o) => o.trim()) ?? []),
 ].filter((v): v is string => Boolean(v));
 
@@ -53,11 +51,7 @@ const socialProviders = {
         apple: {
           clientId: process.env.APPLE_CLIENT_ID,
           clientSecret: process.env.APPLE_CLIENT_SECRET,
-          ...(process.env.APPLE_APP_BUNDLE_IDENTIFIER
-            ? {
-                appBundleIdentifier: process.env.APPLE_APP_BUNDLE_IDENTIFIER,
-              }
-            : {}),
+          appBundleIdentifier: process.env.APPLE_APP_BUNDLE_IDENTIFIER || 'com.crestar.hq',
         },
       }
     : {}),
