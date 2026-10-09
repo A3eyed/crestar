@@ -132,8 +132,8 @@ export default function SupportPage() {
           <p className="text-white/60 text-sm">
             Tell us what's going on and our team will get back to you within 24 hours. Replies
             arrive in your Inbox. You can also email us any time at{' '}
-            <a href="mailto:support@crestar.app" className="text-[#D4AF37] underline">
-              support@crestar.app
+            <a href="mailto:support@crestarhq.com" className="text-[#D4AF37] underline">
+              support@crestarhq.com
             </a>
             .
           </p>

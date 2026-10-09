@@ -388,21 +388,21 @@ export default function PrivacyPolicyPage() {
               <li>
                 <span className="font-semibold">Email:</span>{' '}
                 <a
-                  href="mailto:privacy@crestar.app"
+                  href="mailto:privacy@crestarhq.com"
                   className="underline"
                   style={{ color: '#D4AF37' }}
                 >
-                  privacy@crestar.app
+                  privacy@crestarhq.com
                 </a>
               </li>
               <li>
                 <span className="font-semibold">General support:</span>{' '}
                 <a
-                  href="mailto:support@crestar.app"
+                  href="mailto:support@crestarhq.com"
                   className="underline"
                   style={{ color: '#D4AF37' }}
                 >
-                  support@crestar.app
+                  support@crestarhq.com
                 </a>
               </li>
               <li>

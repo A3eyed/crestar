@@ -8,8 +8,8 @@ import { useTheme } from '../utils/theme';
 
 const LAST_UPDATED = 'September 18, 2026';
 
-const SUPPORT_EMAIL = 'support@crestar.app';
-const PRIVACY_EMAIL = 'privacy@crestar.app';
+const SUPPORT_EMAIL = 'support@crestarhq.com';
+const PRIVACY_EMAIL = 'privacy@crestarhq.com';
 
 const SECTIONS = [
   {

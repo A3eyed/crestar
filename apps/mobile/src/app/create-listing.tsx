@@ -998,69 +998,7 @@ export default function CreateListingScreen() {
                               textAlignVertical: 'top',
                             }}
                           />
-                          <Text style={{ color: colors.text, fontWeight: '700' }}>Allergens</Text>
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                            {ALLERGEN_OPTIONS.map((item) => (
-                              <TouchableOpacity
-                                key={item}
-                                onPress={() => toggleFoodAttribute('allergens', item)}
-                                style={{
-                                  paddingHorizontal: 10,
-                                  paddingVertical: 8,
-                                  borderRadius: 999,
-                                  backgroundColor: foodAttributes.allergens.includes(item)
-                                    ? colors.text
-                                    : colors.cardBackground,
-                                  borderWidth: 1,
-                                  borderColor: colors.border,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    color: foodAttributes.allergens.includes(item)
-                                      ? colors.background
-                                      : colors.text,
-                                    fontSize: 12,
-                                  }}
-                                >
-                                  {item}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                          <Text style={{ color: colors.text, fontWeight: '700' }}>
-                            Dietary flags
-                          </Text>
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                            {DIETARY_FLAGS.map((item) => (
-                              <TouchableOpacity
-                                key={item}
-                                onPress={() => toggleFoodAttribute('dietaryFlags', item)}
-                                style={{
-                                  paddingHorizontal: 10,
-                                  paddingVertical: 8,
-                                  borderRadius: 999,
-                                  backgroundColor: foodAttributes.dietaryFlags.includes(item)
-                                    ? colors.text
-                                    : colors.cardBackground,
-                                  borderWidth: 1,
-                                  borderColor: colors.border,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    color: foodAttributes.dietaryFlags.includes(item)
-                                      ? colors.background
-                                      : colors.text,
-                                    fontSize: 12,
-                                  }}
-                                >
-                                  {item}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        </View>
+                                                  </View>
                       ) : (
                         <View style={{ gap: 12 }}>
                           <TextInput
@@ -1730,7 +1668,11 @@ export default function CreateListingScreen() {
                 }}
               >
                 <Text style={{ color: colors.accentText, fontSize: 16, fontWeight: '700' }}>
-                  Next: Add Color Variants
+                  {listingType !== 'food_beverage'
+                    ? 'Next: Add color variants'
+                    : foodHubType === 'drinks'
+                      ? 'Next: Add packs and quantities'
+                      : 'Next: Add options'}
                 </Text>
                 <ChevronRight size={20} color={colors.accentText} />
               </TouchableOpacity>
@@ -1825,7 +1767,11 @@ export default function CreateListingScreen() {
                   marginBottom: 4,
                 }}
               >
-                Color
+                {listingType !== 'food_beverage'
+                  ? 'Color'
+                  : foodHubType === 'drinks'
+                    ? 'Pack or quantity'
+                    : 'Option'}
               </Text>
               <Text
                 style={{
@@ -1834,8 +1780,38 @@ export default function CreateListingScreen() {
                   marginBottom: 12,
                 }}
               >
-                Optional — skip this if colors don't apply to your product
+                {listingType !== 'food_beverage'
+                  ? "Optional — skip this if colors don't apply to your product"
+                  : foodHubType === 'drinks'
+                    ? 'Add a bottle, pack, or case. Buyers can also reserve bulk for events.'
+                    : 'Name this option. Use a flavor, size, or style that fits what you sell.'}
               </Text>
+              {listingType === 'food_beverage' ? (
+                <TextInput
+                  placeholder={
+                    foodHubType === 'drinks'
+                      ? '500ml, 6-pack, case of 24'
+                      : 'Name this option, such as a flavor, size, or style'
+                  }
+                  placeholderTextColor={colors.inputPlaceholder}
+                  value={currentVariant.color}
+                  onChangeText={(value) => {
+                    const updated = [...colorVariants];
+                    updated[currentVariantIndex].color = value;
+                    setColorVariants(updated);
+                  }}
+                  style={{
+                    backgroundColor: colors.inputBackground,
+                    borderWidth: 1,
+                    borderColor: colors.inputBorder,
+                    borderRadius: 12,
+                    padding: 14,
+                    color: colors.text,
+                    fontSize: 15,
+                    marginBottom: 24,
+                  }}
+                />
+              ) : (
               <TouchableOpacity
                 onPress={() => setShowColorPicker(true)}
                 style={{
@@ -1860,6 +1836,7 @@ export default function CreateListingScreen() {
                 </Text>
                 <ChevronRight size={18} color={colors.textTertiary} />
               </TouchableOpacity>
+              )}
 
               {/* Photos for this color */}
               <Text

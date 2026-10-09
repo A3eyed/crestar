@@ -10,7 +10,7 @@ export default function CreatorShowcasePage({ params }) {
   const [error, setError] = useState(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showcaseUrl, setShowcaseUrl] = useState(
-    `https://crestar.app/@${username}/showcase`,
+    `https://crestarhq.com/@${username}/showcase`,
   );
 
   useEffect(() => {

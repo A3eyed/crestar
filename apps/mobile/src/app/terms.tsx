@@ -8,7 +8,7 @@ import { useTheme } from '../utils/theme';
 
 const LAST_UPDATED = 'September 24, 2026';
 
-const SUPPORT_EMAIL = 'support@crestar.app';
+const SUPPORT_EMAIL = 'support@crestarhq.com';
 
 const SECTIONS = [
   {

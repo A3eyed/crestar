@@ -40,7 +40,9 @@ function firstImage(media) {
 }
 
 function ProductCard({ product, onPress, onAddToCart, colors, t }) {
-  const soldOut = product.stock === 0;
+  // Parent stock is often 0 when units live on variants. Only mark sold out
+  // when the listing actually includes variants and every one is empty.
+  const soldOut = product.tracksVariants ? product.stock === 0 : false;
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -205,10 +207,18 @@ export default function ShopScreen() {
             sellerId: p.seller_id,
             seller_currency: p.seller_currency || "GHS",
             category: String(p.category || "all").toLowerCase(),
-            stock:
-              p.stock_quantity == null || p.stock_quantity === ""
-                ? null
-                : Number(p.stock_quantity),
+            stock: (() => {
+              const variants = Array.isArray(p.variants) ? p.variants : null;
+              if (variants && variants.length > 0) {
+                return variants.reduce(
+                  (sum, variant) => sum + Number(variant.stock_quantity || 0),
+                  0
+                );
+              }
+              if (p.stock_quantity == null || p.stock_quantity === "") return null;
+              return Number(p.stock_quantity);
+            })(),
+            tracksVariants: Array.isArray(p.variants) && p.variants.length > 0,
             soldCount: Number(p.sold_count || p.orders_count || 0),
             hasVideo: !!(p.video_id || p.has_video || p.origin_video_id),
             videoId: p.video_id || p.origin_video_id || null,
@@ -230,7 +240,7 @@ export default function ShopScreen() {
   };
 
   const handleAddToCart = (product) => {
-    if (product.stock === 0) return;
+    if (product.tracksVariants && product.stock === 0) return;
     if (!isAuthenticated) {
       signIn();
       return;

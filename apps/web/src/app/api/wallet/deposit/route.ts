@@ -71,7 +71,7 @@ export async function POST(request) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: email || `user${userId}@crestar.app`,
+          email: email || `user${userId}@crestarhq.com`,
           amount: Math.round(amount * 100), // Convert to pesewas
           reference,
           callback_url: `${process.env.NEXT_PUBLIC_CREATE_APP_URL || "https://app.crestar.com"}/wallet?deposit=success`,
