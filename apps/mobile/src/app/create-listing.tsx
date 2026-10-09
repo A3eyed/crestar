@@ -103,6 +103,76 @@ const STANDARD_FOOD_CATEGORIES = [
   'Special Diets',
 ];
 
+
+const FOOD_LISTING_STYLES = {
+  Bakery: {
+    next: 'Next: Add bakery items',
+    label: 'Bakery item',
+    hint: 'Add each thing you sell, such as a loaf, cake, pastry, or pack.',
+    placeholder: 'Loaf, cake, pastry, or pack',
+  },
+  'Pantry Staples': {
+    next: 'Next: Add types and packs',
+    label: 'Type or pack',
+    hint: 'Add the type and pack you sell, such as a grain, size, or bag.',
+    placeholder: 'Type, size, or pack',
+  },
+  'Ready Meals': {
+    next: 'Next: Add meal options',
+    label: 'Meal option',
+    hint: 'Add each meal style you cook. Do not use a color.',
+    placeholder: 'Meal style or portion',
+  },
+  'Meat & Poultry': {
+    next: 'Next: Add cuts and packs',
+    label: 'Cut or pack',
+    hint: 'Add the cut, weight, or pack.',
+    placeholder: 'Cut, weight, or pack',
+  },
+  Seafood: {
+    next: 'Next: Add seafood options',
+    label: 'Seafood option',
+    hint: 'Add the type, cut, or pack.',
+    placeholder: 'Type, cut, or pack',
+  },
+  'Fresh Produce': {
+    next: 'Next: Add produce options',
+    label: 'Produce option',
+    hint: 'Add the item, size, or bunch.',
+    placeholder: 'Item, size, or bunch',
+  },
+  'Dairy & Eggs': {
+    next: 'Next: Add dairy options',
+    label: 'Dairy option',
+    hint: 'Add the item and pack size.',
+    placeholder: 'Item or pack size',
+  },
+  'Snacks & Confectionery': {
+    next: 'Next: Add snack options',
+    label: 'Snack option',
+    hint: 'Add the flavor, size, or pack.',
+    placeholder: 'Flavor, size, or pack',
+  },
+  'Frozen Food': {
+    next: 'Next: Add frozen options',
+    label: 'Frozen option',
+    hint: 'Add the item and pack.',
+    placeholder: 'Item or pack',
+  },
+  'Special Diets': {
+    next: 'Next: Add diet options',
+    label: 'Diet option',
+    hint: 'Add the item and how it is prepared or packed.',
+    placeholder: 'Item or pack',
+  },
+};
+const DEFAULT_FOOD_STYLE = {
+  next: 'Next: Add options',
+  label: 'Option',
+  hint: 'Name each option the way a shopper would choose it.',
+  placeholder: 'Name this option, such as a flavor, size, or style',
+};
+
 const STANDARD_DRINK_CATEGORIES = [
   'Water',
   'Soft Drinks',
@@ -1672,7 +1742,7 @@ export default function CreateListingScreen() {
                     ? 'Next: Add color variants'
                     : foodHubType === 'drinks'
                       ? 'Next: Add packs and quantities'
-                      : 'Next: Add options'}
+                      : (FOOD_LISTING_STYLES[foodSubcategory] || DEFAULT_FOOD_STYLE).next}
                 </Text>
                 <ChevronRight size={20} color={colors.accentText} />
               </TouchableOpacity>
@@ -1771,7 +1841,7 @@ export default function CreateListingScreen() {
                   ? 'Color'
                   : foodHubType === 'drinks'
                     ? 'Pack or quantity'
-                    : 'Option'}
+                    : (FOOD_LISTING_STYLES[foodSubcategory] || DEFAULT_FOOD_STYLE).label}
               </Text>
               <Text
                 style={{
@@ -1784,14 +1854,14 @@ export default function CreateListingScreen() {
                   ? "Optional — skip this if colors don't apply to your product"
                   : foodHubType === 'drinks'
                     ? 'Add a bottle, pack, or case. Buyers can also reserve bulk for events.'
-                    : 'Name this option. Use a flavor, size, or style that fits what you sell.'}
+                    : (FOOD_LISTING_STYLES[foodSubcategory] || DEFAULT_FOOD_STYLE).hint}
               </Text>
               {listingType === 'food_beverage' ? (
                 <TextInput
                   placeholder={
                     foodHubType === 'drinks'
                       ? '500ml, 6-pack, case of 24'
-                      : 'Name this option, such as a flavor, size, or style'
+                      : (FOOD_LISTING_STYLES[foodSubcategory] || DEFAULT_FOOD_STYLE).placeholder
                   }
                   placeholderTextColor={colors.inputPlaceholder}
                   value={currentVariant.color}

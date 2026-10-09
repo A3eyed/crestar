@@ -47,6 +47,17 @@ You promise that Your Content does not infringe anyone else's rights (including 
 You can delete Your Content at any time. Deleting content removes it from public view; residual copies may persist in backups for a limited period.`,
   },
   {
+
+    title: 'Copyright and other people\'s work',
+    body: `You may only upload content you own or have permission to use. That includes videos, photos, music, logos, product images, and descriptions.
+
+You grant Crestar a worldwide, non-exclusive license to host, display, and promote Your Content on the Platform so the service can operate. You keep ownership.
+
+If you believe something on Crestar infringes your copyright, report it through in-app support as @Crestar with the work and the location of the content. Repeat infringement can close an account.
+
+Creating an account means you agree to these Terms and the Privacy Policy. You cannot finish signup without that agreement.`,
+  },
+  {
     title: '5. Community Rules',
     body: `Crestar is a marketplace and a community. You agree NOT to:
 

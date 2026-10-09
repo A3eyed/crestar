@@ -19,6 +19,7 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [agreed, setAgreed] = useState(false);
   const [isDark, setIsDark] = useState<boolean>(true);
   const [ready, setReady] = useState<boolean>(false);
   const [callbackUrl, setCallbackUrl] = useState<string>('/');
@@ -84,6 +85,11 @@ export default function SignUpPage() {
         return;
       }
 
+      if (!agreed) {
+        setError('Agree to the Terms and Privacy Policy to create an account.');
+        return;
+      }
+
       setError(null);
       setLoading(true);
 
@@ -124,7 +130,7 @@ export default function SignUpPage() {
         setLoading(false);
       }
     },
-    [email, password, signUpWithCredentials, callbackUrl, isWebView]
+    [email, password, agreed, signUpWithCredentials, callbackUrl, isWebView]
   );
 
   // Show black while loading — prevents white flash in dark mobile WebView
@@ -264,9 +270,28 @@ export default function SignUpPage() {
             </div>
           )}
 
+          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', color: c.subtle, fontSize: 13, lineHeight: 1.4 }}>
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => {
+                setAgreed(e.target.checked);
+                if (error) setError(null);
+              }}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              I agree to the{' '}
+              <a href="/terms" style={{ color: c.text, fontWeight: 700 }}>Terms of Service</a>
+              {' '}and{' '}
+              <a href="/privacy" style={{ color: c.text, fontWeight: 700 }}>Privacy Policy</a>
+              , including the rules on your content, copyright, payments, and prohibited items.
+            </span>
+          </label>
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !agreed}
             style={{
               width: '100%',
               padding: '15px 16px',

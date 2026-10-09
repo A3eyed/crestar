@@ -168,6 +168,8 @@ Most issues can be resolved quickly and amicably.`,
   },
 ];
 
+const ACCOUNT_AGREEMENT = 'Creating an account requires agreement to these Terms and the Privacy Policy. You may only post content you own or have permission to use. Repeat copyright infringement can close an account.';
+
 export default function TermsOfServicePage() {
   return (
     <div className="min-h-screen bg-black text-white">
