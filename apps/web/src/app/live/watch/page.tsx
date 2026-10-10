@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import useUser from "@/utils/useUser";
 import CurrencyPrice from "@/components/CurrencyPrice";
+import StreamPlayer from "@/components/live/StreamPlayer";
 import {
   ArrowLeft,
   Eye,
@@ -36,7 +37,6 @@ export default function LiveWatchPage() {
     sessionIdRef.current = sessionId;
     loadSession(sessionId);
 
-    // Join + heartbeat while watching
     const join = async () => {
       try {
         await fetch("/api/live/sessions", {
@@ -154,10 +154,18 @@ export default function LiveWatchPage() {
     );
   }
 
+  const hasStream = Boolean(session.webrtc_playback_url || session.stream_url);
+
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="relative h-screen">
-        {session.thumbnail ? (
+        {hasStream ? (
+          <StreamPlayer
+            whepUrl={session.webrtc_playback_url}
+            hlsUrl={session.stream_url}
+            poster={session.thumbnail}
+          />
+        ) : session.thumbnail ? (
           <img src={session.thumbnail} alt="" className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-purple-900/60 to-pink-900/50 flex items-center justify-center">
@@ -166,12 +174,12 @@ export default function LiveWatchPage() {
                 <Eye size={36} />
               </div>
               <p className="text-2xl font-bold">{session.title || "Live Shopping"}</p>
+              <p className="text-sm text-white/50 mt-2">Waiting for host video…</p>
             </div>
           </div>
         )}
 
-        {/* Header */}
-        <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/70 to-transparent">
+        <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/70 to-transparent z-10">
           <div className="flex items-center justify-between">
             <button
               onClick={() => window.history.back()}
@@ -206,11 +214,10 @@ export default function LiveWatchPage() {
           </div>
         </div>
 
-        {/* Pinned product card (TikTok-style) */}
         {featured && (
           <button
             onClick={() => setSelectedProduct(featured)}
-            className="absolute right-3 top-1/3 w-36 bg-black/70 backdrop-blur-md border border-yellow-400/50 rounded-2xl overflow-hidden shadow-xl"
+            className="absolute right-3 top-1/3 w-36 bg-black/70 backdrop-blur-md border border-yellow-400/50 rounded-2xl overflow-hidden shadow-xl z-10"
           >
             <div className="flex items-center gap-1 px-2 pt-2 text-yellow-400">
               <Pin size={12} />
@@ -239,8 +246,7 @@ export default function LiveWatchPage() {
           </button>
         )}
 
-        {/* Bottom */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 to-transparent">
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 to-transparent z-10">
           <div className="flex items-center gap-2 mb-3">
             <button
               onClick={() => setChatOpen(!chatOpen)}
