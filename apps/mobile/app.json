@@ -19,25 +19,16 @@
       "supportsTablet": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": [
-          "remote-notification"
-        ],
+        "UIBackgroundModes": ["remote-notification"],
         "NSCameraUsageDescription": "Crestar uses your camera only when you choose to record a shoppable video, go live, or take a photo for your profile or a product listing.",
         "NSMicrophoneUsageDescription": "Crestar uses your microphone only while you are recording a video or streaming live, so your videos have sound.",
         "NSPhotoLibraryUsageDescription": "Crestar needs access to your photo library so you can pick photos and videos to post, to add to your product listings, or to use as your profile picture.",
         "NSPhotoLibraryAddUsageDescription": "Crestar saves videos and photos you create in the app to your photo library when you ask it to.",
-        "NSLocationWhenInUseUsageDescription": "Crestar uses your location only while the app is open: to fill in your delivery address, show restaurants and sellers near you in FoodHub, set up seller delivery zones, and let deliverers share their position while they are viewing an active delivery. Crestar never collects your location in the background or when the app is closed.",
-        "NSContactsUsageDescription": "We need access to your contacts to use contacts.",
-        "NSCalendarsUsageDescription": "We need access to your notifications to help you stay updated.",
-        "NSCalendarsFullAccessUsageDescription": "We need access to your calendar to help you stay updated.",
-        "NSRemindersUsageDescription": "We need access to your reminders to help you stay updated.",
-        "NSRemindersFullAccessUsageDescription": "We need access to your reminders to help you stay updated.",
-        "NSLocationAlwaysUsageDescription": "We need access to your location to help you find your way.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need access to your location to help you find your way.",
-        "NSSpeechRecognitionUsageDescription": "This app does not use your speech recognition.",
+        "NSLocationWhenInUseUsageDescription": "Crestar uses your location only while the app is open: to fill in your delivery address, show nearby sellers, set up delivery zones, and let deliverers share position during an active delivery.",
         "CFBundleDisplayName": "Crestar"
       },
-      "bundleIdentifier": "com.crestar.hq"
+      "bundleIdentifier": "com.crestar.hq",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -100,7 +91,8 @@
         {
           "color": "#D4AF37"
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "web": {
       "bundler": "metro",

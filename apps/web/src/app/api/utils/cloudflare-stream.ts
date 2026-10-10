@@ -2,19 +2,21 @@
 /**
  * Cloudflare Stream Live Inputs
  *
- * Env (set in Cloudflare / hosting secrets — never commit):
- *   CLOUDFLARE_ACCOUNT_ID   — same as R2 account id if one CF account
- *   CLOUDFLARE_API_TOKEN    — API token with Stream:Edit (or Account Stream Write)
- *
- * Creates one Live Input per Crestar live session.
- * Host publishes with WHIP (browser) or RTMPS (OBS).
- * Viewers play with WHEP (low latency) or HLS.
+ * Env (Cloudflare / hosting secrets — never commit):
+ *   CLOUDFLARE_ACCOUNT_ID  — or R2_ACCOUNT_ID
+ *   CLOUDFLARE_API_TOKEN   — Stream:Edit (or CF_API_TOKEN)
  */
 
 const ACCOUNT_ID = () =>
-  process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || '';
+  process.env.CLOUDFLARE_ACCOUNT_ID ||
+  process.env.R2_ACCOUNT_ID ||
+  '';
+
 const API_TOKEN = () =>
-  process.env.CLOUDFLARE_API_TOKEN || process.env.CF_API_TOKEN || '';
+  process.env.CLOUDFLARE_API_TOKEN ||
+  process.env.CF_API_TOKEN ||
+  process.env.CLOUDFLARE_STREAM_API_TOKEN ||
+  '';
 
 function streamApiBase() {
   const id = ACCOUNT_ID();
@@ -35,10 +37,29 @@ export function isStreamConfigured() {
   return Boolean(ACCOUNT_ID() && API_TOKEN());
 }
 
-/**
- * Create a Live Input for a Crestar shopping session.
- * Returns ingest + playback endpoints.
- */
+/** Lightweight probe for ops / health checks */
+export async function probeStreamAccess() {
+  if (!isStreamConfigured()) {
+    return { ok: false, reason: 'missing_env', accountId: Boolean(ACCOUNT_ID()) };
+  }
+  try {
+    const res = await fetch(`${streamApiBase()}/live_inputs?per_page=1`, {
+      headers: authHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      const msg =
+        data?.messages?.[0]?.message ||
+        data?.errors?.[0]?.message ||
+        res.statusText;
+      return { ok: false, reason: msg, status: res.status };
+    }
+    return { ok: true, liveInputCount: Array.isArray(data.result) ? data.result.length : null };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  }
+}
+
 export async function createLiveInput({ name, sessionId }) {
   const res = await fetch(`${streamApiBase()}/live_inputs`, {
     method: 'POST',
@@ -68,11 +89,9 @@ export async function createLiveInput({ name, sessionId }) {
   const input = data.result;
   return {
     uid: input.uid,
-    // Host-only (secret)
     webrtcPublishUrl: input.webRTC?.url || null,
     rtmpsUrl: input.rtmps?.url || null,
     rtmpsStreamKey: input.rtmps?.streamKey || null,
-    // Safe for viewers
     hlsUrl: input.playback?.hls || null,
     dashUrl: input.playback?.dash || null,
     webrtcPlaybackUrl: input.webRTCPlayback?.url || null,
@@ -80,7 +99,6 @@ export async function createLiveInput({ name, sessionId }) {
   };
 }
 
-/** Disable ingest so the host can no longer push (call when session ends). */
 export async function disableLiveInput(uid) {
   if (!uid) return;
   try {
@@ -98,7 +116,6 @@ export async function disableLiveInput(uid) {
   }
 }
 
-/** Optional: delete the live input after end to free quota. */
 export async function deleteLiveInput(uid) {
   if (!uid) return;
   try {
