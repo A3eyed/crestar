@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import useUser from "@/utils/useUser";
 import CurrencyPrice from "@/components/CurrencyPrice";
+import WhipPublisher from "@/components/live/WhipPublisher";
 import {
   ArrowLeft,
   Video,
@@ -31,6 +32,7 @@ export default function LiveHostPage() {
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
+  const [broadcastStatus, setBroadcastStatus] = useState("");
 
   const fetchShowcase = useCallback(async () => {
     if (!user) return;
@@ -53,7 +55,6 @@ export default function LiveHostPage() {
     fetchShowcase();
   }, [user, fetchShowcase]);
 
-  // Poll viewer count while live
   useEffect(() => {
     if (!isLive || !liveSession?.id) return;
     const tick = async () => {
@@ -63,6 +64,9 @@ export default function LiveHostPage() {
           const data = await res.json();
           setViewerCount(data.session?.viewer_count || 0);
           setSessionProducts(data.products || []);
+          if (data.session?.webrtc_publish_url && !liveSession.webrtc_publish_url) {
+            setLiveSession((s) => ({ ...s, ...data.session }));
+          }
         }
       } catch {}
     };
@@ -104,6 +108,11 @@ export default function LiveHostPage() {
       setLiveSession(data.session);
       setSessionProducts(data.products || []);
       setIsLive(true);
+      if (!data.streamReady) {
+        setError(
+          "Session started, but Cloudflare Stream is not configured. Add CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN (Stream Write) to secrets for camera broadcast.",
+        );
+      }
     } catch (err) {
       console.error("Failed to start live:", err);
       setError("Failed to start live session");
@@ -167,9 +176,34 @@ export default function LiveHostPage() {
         : "";
     return (
       <div className="min-h-screen bg-black text-white">
-        <div className="relative h-screen bg-gradient-to-br from-purple-900/50 to-pink-900/50 flex flex-col">
-          <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/60 to-transparent z-10">
-            <div className="flex items-center justify-between">
+        <div className="relative h-screen flex flex-col">
+          {liveSession?.webrtc_publish_url ? (
+            <WhipPublisher
+              whipUrl={liveSession.webrtc_publish_url}
+              micEnabled={micEnabled}
+              videoEnabled={videoEnabled}
+              onStatus={setBroadcastStatus}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-pink-900/50 flex items-center justify-center">
+              <div className="text-center px-6">
+                <div className="w-24 h-24 bg-red-500/90 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                  <Video size={44} />
+                </div>
+                <p className="text-sm text-white/70">
+                  Shopping session is live. Configure Cloudflare Stream to enable camera broadcast.
+                </p>
+                {liveSession?.rtmps_url && (
+                  <p className="mt-3 text-xs text-white/50">
+                    OBS: {liveSession.rtmps_url} · key in session (host only)
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/60 to-transparent z-10 pointer-events-none">
+            <div className="flex items-center justify-between pointer-events-auto">
               <div className="flex items-center gap-2 bg-red-500 px-3 py-1.5 rounded-full">
                 <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
                 <span className="text-white text-xs font-bold">LIVE</span>
@@ -183,23 +217,12 @@ export default function LiveHostPage() {
             {watchUrl && (
               <p className="mt-1 text-xs text-white/50 truncate">Share: {watchUrl}</p>
             )}
+            {broadcastStatus === "live" && (
+              <p className="mt-1 text-[10px] text-green-400">Camera connected · Cloudflare Stream</p>
+            )}
           </div>
 
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center px-6">
-              <div className="w-28 h-28 bg-red-500/90 rounded-full flex items-center justify-center mx-auto mb-5 animate-pulse">
-                <Video size={52} className="text-white" />
-              </div>
-              <h1 className="text-2xl font-bold mb-1">{title}</h1>
-              <p className="text-white/70 text-sm mb-4">{description}</p>
-              <p className="text-xs text-white/50">
-                Camera streaming hooks in next — product shopping is live now.
-              </p>
-            </div>
-          </div>
-
-          {/* Product tray while live */}
-          <div className="absolute bottom-28 left-0 right-0 px-4">
+          <div className="absolute bottom-28 left-0 right-0 px-4 z-10">
             <div className="flex gap-2 overflow-x-auto pb-2">
               {sessionProducts.map((p) => (
                 <button
@@ -213,7 +236,11 @@ export default function LiveHostPage() {
                 >
                   {p.product_media?.[0] && (
                     <img
-                      src={typeof p.product_media[0] === "string" ? p.product_media[0] : p.product_media[0]?.url}
+                      src={
+                        typeof p.product_media[0] === "string"
+                          ? p.product_media[0]
+                          : p.product_media[0]?.url
+                      }
                       alt=""
                       className="w-full h-20 object-cover"
                     />
@@ -236,7 +263,7 @@ export default function LiveHostPage() {
             </div>
           </div>
 
-          <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-black/90 to-transparent">
+          <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-black/90 to-transparent z-10">
             <div className="flex items-center justify-center gap-4 mb-4">
               <button
                 onClick={() => setMicEnabled(!micEnabled)}
@@ -257,7 +284,7 @@ export default function LiveHostPage() {
             </div>
             <button
               onClick={handleEndLive}
-              className="w-full py-3.5 bg-red-500 rounded-xl font-bold hover:bg-red-600 transition-colors"
+              className="w-full py-3.5 bg-red-500 rounded-xl font-bold hover:bg-red-600"
             >
               End Live Session
             </button>
@@ -284,7 +311,7 @@ export default function LiveHostPage() {
 
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         <p className="text-sm text-white/60">
-          Sellers and creators can host live shopping. Viewers watch, chat, and buy pinned products — TikTok-style, shopping only.
+          Sellers and creators host live shopping. Viewers watch on Cloudflare Stream, chat, and buy pinned products.
         </p>
 
         <div>
@@ -326,7 +353,11 @@ export default function LiveHostPage() {
                 <div key={product.id} className="flex items-center gap-3 bg-white/5 p-3 rounded-lg">
                   {product.media?.[0] && (
                     <img
-                      src={typeof product.media[0] === "string" ? product.media[0] : product.media[0]?.url}
+                      src={
+                        typeof product.media[0] === "string"
+                          ? product.media[0]
+                          : product.media[0]?.url
+                      }
                       alt=""
                       className="w-12 h-12 rounded object-cover"
                     />
@@ -401,7 +432,11 @@ export default function LiveHostPage() {
                       >
                         {product.media?.[0] && (
                           <img
-                            src={typeof product.media[0] === "string" ? product.media[0] : product.media[0]?.url}
+                            src={
+                              typeof product.media[0] === "string"
+                                ? product.media[0]
+                                : product.media[0]?.url
+                            }
                             alt=""
                             className="w-14 h-14 rounded object-cover"
                           />
