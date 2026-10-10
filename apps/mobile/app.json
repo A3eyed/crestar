@@ -3,7 +3,7 @@
     "name": "Crestar",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/4aaaab90-1247-4548-87c4-ddb1aa451994.png",
+    "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "autolinking": {
       "exclude": [
@@ -34,14 +34,15 @@
         "NSRemindersFullAccessUsageDescription": "We need access to your reminders to help you stay updated.",
         "NSLocationAlwaysUsageDescription": "We need access to your location to help you find your way.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "We need access to your location to help you find your way.",
-        "NSSpeechRecognitionUsageDescription": "This app does not use your speech recognition."
+        "NSSpeechRecognitionUsageDescription": "This app does not use your speech recognition.",
+        "CFBundleDisplayName": "Crestar"
       },
       "bundleIdentifier": "com.crestar.hq"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/4aaaab90-1247-4548-87c4-ddb1aa451994.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
       },
       "permissions": [
         "android.permission.RECORD_AUDIO",
@@ -62,12 +63,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/d00bc126-bf02-4cc9-b391-077b3b972bf1.png",
+          "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#000000",
           "dark": {
-            "image": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/d00bc126-bf02-4cc9-b391-077b3b972bf1.png",
+            "image": "./assets/images/splash-icon.png",
             "imageWidth": 200,
             "resizeMode": "contain",
             "backgroundColor": "#000000"
@@ -86,8 +87,8 @@
       [
         "expo-video",
         {
-          "supportsBackgroundPlayback": true,
-          "supportsPictureInPicture": true
+          "supportsBackgroundPlayback": false,
+          "supportsPictureInPicture": false
         }
       ],
       "expo-font",
@@ -103,7 +104,7 @@
     ],
     "web": {
       "bundler": "metro",
-      "favicon": "https://dtvoeevhaseb5.cloudfront.net/user-uploads/4aaaab90-1247-4548-87c4-ddb1aa451994.png"
+      "favicon": "./assets/images/favicon.png"
     },
     "experiments": {
       "typedRoutes": true

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import useLocalization from "../../utils/localization";
 import { useTheme } from "../../utils/theme";
+import * as Haptics from "expo-haptics";
 
 const BRAND = "#D4AF37";
 
@@ -55,6 +56,11 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.tabBarActive || BRAND,
         tabBarInactiveTintColor: colors.tabBarInactive || "#9CA3AF",
         tabBarLabelStyle: { fontSize: 11, fontWeight: "600", marginTop: 2 },
+      }}
+      screenListeners={{
+        tabPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        },
       }}
     >
       <Tabs.Screen
