@@ -1,6 +1,11 @@
 // @ts-nocheck
 import sql from '@/app/api/utils/sql';
 import { auth } from '@/auth';
+import {
+  createLiveInput,
+  disableLiveInput,
+  isStreamConfigured,
+} from '@/app/api/utils/cloudflare-stream';
 
 async function canHostLive(userId) {
   const [seller] = await sql`
@@ -26,8 +31,6 @@ async function canHostLive(userId) {
     return { allowed: true, role: 'creator', profile: creator };
   }
 
-  // Allow any authenticated user with at least one active product/service
-  // (soft gate so early sellers can test live shopping)
   const [hasListing] = await sql`
     SELECT 1 AS ok FROM products WHERE seller_id = ${userId} AND status = 'active' LIMIT 1
   `;
@@ -54,10 +57,28 @@ async function loadSessionProducts(sessionId) {
   `;
 }
 
+/** Never send WHIP publish URL or RTMPS key to non-hosts. */
+function publicSession(row, { isHost = false } = {}) {
+  if (!row) return row;
+  const out = { ...row };
+  if (!isHost) {
+    delete out.webrtc_publish_url;
+    delete out.rtmps_stream_key;
+    delete out.rtmps_url;
+    delete out.stream_key;
+  }
+  return out;
+}
+
 export async function GET(request) {
   try {
     const url = new URL(request.url);
     const sessionId = url.searchParams.get('id');
+    let viewerId = null;
+    try {
+      const s = await auth();
+      viewerId = s?.user?.id?.toString() || null;
+    } catch {}
 
     if (sessionId) {
       const rows = await sql`
@@ -75,12 +96,19 @@ export async function GET(request) {
       if (!rows.length) {
         return Response.json({ error: 'Session not found' }, { status: 404 });
       }
+      const isHost = viewerId && rows[0].host_user_id === viewerId;
       const products = await loadSessionProducts(sessionId);
-      return Response.json({ session: rows[0], products });
+      return Response.json({
+        session: publicSession(rows[0], { isHost }),
+        products,
+        isHost: !!isHost,
+      });
     }
 
     const sessions = await sql`
-      SELECT ls.*,
+      SELECT ls.id, ls.host_user_id, ls.title, ls.description, ls.thumbnail, ls.status,
+        ls.stream_url, ls.webrtc_playback_url, ls.viewer_count, ls.peak_viewer_count,
+        ls.started_at, ls.created_at,
         au.username, au.display_name, au.profile_image, au.is_verified,
         COALESCE(pp.business_name, bc.business_name, au.display_name, au.username) AS seller_name,
         pp.seller_type
@@ -128,6 +156,16 @@ export async function POST(request) {
       serviceIds = [],
     } = body;
 
+    // End any previous live session for this host (+ disable their Stream inputs)
+    const previous = await sql`
+      SELECT id, stream_input_uid FROM live_sessions
+      WHERE host_user_id = ${userId} AND status = 'live'
+    `;
+    for (const prev of previous) {
+      if (prev.stream_input_uid && isStreamConfigured()) {
+        await disableLiveInput(prev.stream_input_uid);
+      }
+    }
     await sql`
       UPDATE live_sessions
       SET status = 'ended', ended_at = NOW(), updated_at = NOW()
@@ -141,13 +179,46 @@ export async function POST(request) {
       RETURNING *
     `;
 
+    // Cloudflare Stream live input (optional if not configured — shopping still works)
+    let streamMeta = null;
+    if (isStreamConfigured()) {
+      try {
+        streamMeta = await createLiveInput({
+          name: `Crestar · ${sessionTitle}`.slice(0, 100),
+          sessionId: row.id,
+        });
+        await sql`
+          UPDATE live_sessions SET
+            stream_input_uid = ${streamMeta.uid},
+            stream_url = ${streamMeta.hlsUrl},
+            stream_key = ${streamMeta.rtmpsStreamKey},
+            webrtc_publish_url = ${streamMeta.webrtcPublishUrl},
+            webrtc_playback_url = ${streamMeta.webrtcPlaybackUrl},
+            rtmps_url = ${streamMeta.rtmpsUrl},
+            rtmps_stream_key = ${streamMeta.rtmpsStreamKey},
+            updated_at = NOW()
+          WHERE id = ${row.id}
+        `;
+        Object.assign(row, {
+          stream_input_uid: streamMeta.uid,
+          stream_url: streamMeta.hlsUrl,
+          stream_key: streamMeta.rtmpsStreamKey,
+          webrtc_publish_url: streamMeta.webrtcPublishUrl,
+          webrtc_playback_url: streamMeta.webrtcPlaybackUrl,
+          rtmps_url: streamMeta.rtmpsUrl,
+          rtmps_stream_key: streamMeta.rtmpsStreamKey,
+        });
+      } catch (streamErr) {
+        console.error('[live] Stream live input failed (session still created):', streamErr.message);
+      }
+    }
+
     let sort = 0;
     for (const pid of productIds) {
       if (!pid) continue;
       await sql`
         INSERT INTO live_session_products (session_id, product_id, is_featured, sort_order)
         VALUES (${row.id}, ${pid}, ${sort === 0}, ${sort})
-        ON CONFLICT DO NOTHING
       `;
       sort += 1;
     }
@@ -156,13 +227,18 @@ export async function POST(request) {
       await sql`
         INSERT INTO live_session_products (session_id, service_id, is_featured, sort_order)
         VALUES (${row.id}, ${sid}, ${sort === 0}, ${sort})
-        ON CONFLICT DO NOTHING
       `;
       sort += 1;
     }
 
     const products = await loadSessionProducts(row.id);
-    return Response.json({ session: row, products, role: gate.role });
+    return Response.json({
+      session: publicSession(row, { isHost: true }),
+      products,
+      role: gate.role,
+      streamConfigured: isStreamConfigured(),
+      streamReady: Boolean(streamMeta?.uid),
+    });
   } catch (error) {
     console.error('Create live session error:', error);
     return Response.json({ error: 'Failed to create session', details: error.message }, { status: 500 });
@@ -185,6 +261,13 @@ export async function PUT(request) {
     }
 
     if (action === 'end') {
+      const [owned] = await sql`
+        SELECT id, stream_input_uid FROM live_sessions
+        WHERE id = ${sessionId} AND host_user_id = ${userId}
+      `;
+      if (owned?.stream_input_uid && isStreamConfigured()) {
+        await disableLiveInput(owned.stream_input_uid);
+      }
       await sql`
         UPDATE live_sessions
         SET status = 'ended', ended_at = NOW(), updated_at = NOW()
