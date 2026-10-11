@@ -7,16 +7,31 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+      "corepack": true,
+      "node": "20.18.1",
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "YARN_ENABLE_IMMUTABLE_INSTALLS": "false"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+      "corepack": true,
+      "node": "20.18.1",
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "YARN_ENABLE_IMMUTABLE_INSTALLS": "false"
+      }
     },
     "production": {
       "autoIncrement": true,
+      "corepack": true,
+      "node": "20.18.1",
       "ios": { "resourceClass": "m-medium" },
-      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "YARN_ENABLE_IMMUTABLE_INSTALLS": "false"
+      }
     }
   },
   "submit": {
