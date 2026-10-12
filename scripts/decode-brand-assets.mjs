@@ -25,28 +25,36 @@ function readB64(baseName) {
   return out || null;
 }
 
-const mapping = [
-  ['apps__web__public__favicon.png', 'apps/web/public/favicon.png'],
-  ['apps__web__public__icon-192.png', 'apps/web/public/icon-192.png'],
-  ['apps__web__public__icon-512.png', 'apps/web/public/icon-512.png'],
-  ['apps__web__public__logo.png', 'apps/web/public/logo.png'],
-  ['apps__mobile__assets__images__icon.png', 'apps/mobile/assets/images/icon.png'],
-  ['apps__mobile__assets__images__favicon.png', 'apps/mobile/assets/images/favicon.png'],
-  ['apps__mobile__assets__images__splash-icon.png', 'apps/mobile/assets/images/splash-icon.png'],
-  ['apps__mobile__assets__images__splash-light.png', 'apps/mobile/assets/images/splash-light.png'],
-];
-
-for (const [baseName, destRel] of mapping) {
+function writePng(baseName, destRel) {
   const b64 = readB64(baseName);
-  if (!b64) {
-    console.warn('[brand] skip missing', baseName);
-    continue;
-  }
+  if (!b64) return false;
   const dest = path.join(root, destRel);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   const buf = Buffer.from(b64, 'base64');
   fs.writeFileSync(dest, buf);
   console.log('[brand] wrote', destRel, buf.length, 'bytes');
+  return true;
+}
+
+writePng('apps__web__public__favicon.png', 'apps/web/public/favicon.png');
+writePng('apps__web__public__icon-192.png', 'apps/web/public/icon-192.png');
+writePng('apps__web__public__icon-512.png', 'apps/web/public/icon-512.png');
+writePng('apps__web__public__logo.png', 'apps/web/public/logo.png');
+
+// App icon: prefer dedicated icon asset, else reuse logo art
+if (!writePng('apps__mobile__assets__images__icon.png', 'apps/mobile/assets/images/icon.png')) {
+  writePng('apps__web__public__logo.png', 'apps/mobile/assets/images/icon.png');
+}
+writePng('apps__mobile__assets__images__favicon.png', 'apps/mobile/assets/images/favicon.png');
+writePng('apps__mobile__assets__images__splash-icon.png', 'apps/mobile/assets/images/splash-icon.png');
+writePng('apps__mobile__assets__images__splash-light.png', 'apps/mobile/assets/images/splash-light.png');
+
+// If icon-512 missing, copy logo
+const logoPath = path.join(root, 'apps/web/public/logo.png');
+const icon512 = path.join(root, 'apps/web/public/icon-512.png');
+if (fs.existsSync(logoPath) && !fs.existsSync(icon512)) {
+  fs.copyFileSync(logoPath, icon512);
+  console.log('[brand] wrote apps/web/public/icon-512.png (copy of logo)');
 }
 
 const iconPath = path.join(root, 'apps/mobile/assets/images/icon.png');
