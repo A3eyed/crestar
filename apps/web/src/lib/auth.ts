@@ -1,222 +1,87 @@
 /**
- * Crestar Better Auth — Neon Postgres + social providers
+ * Crestar — Neon Managed Better Auth (server)
  *
- * Cloudflare Workers: use the platform WebSocket (do NOT import Node `ws`).
- * Node local/dev: polyfill WebSocket via `ws` only when global WebSocket is missing.
+ * Auth is hosted by Neon (Managed Better Auth). This app proxies
+ * /api/auth/* to NEON_AUTH_BASE_URL and signs session cookies with
+ * NEON_AUTH_COOKIE_SECRET.
  *
- * Env is only required at request time, not during `next build`.
+ * Env is only required at request time (not during `next build`).
  */
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { argon2Verify } from 'argon2-wasm-edge';
-import { betterAuth } from 'better-auth';
-import { createAuthMiddleware } from 'better-auth/api';
-import { verifyPassword } from 'better-auth/crypto';
-import { bearer } from 'better-auth/plugins';
-import { importPKCS8, SignJWT } from 'jose';
+import { createNeonAuth } from '@neondatabase/auth/next/server';
 
-if (typeof WebSocket === 'undefined') {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const wsModule = require('ws');
-    neonConfig.webSocketConstructor = wsModule;
-  } catch {
-    // ignore at build time
-  }
-} else {
-  neonConfig.webSocketConstructor = WebSocket;
-}
+type NeonAuth = ReturnType<typeof createNeonAuth>;
 
-function createPool() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
+let _auth: NeonAuth | null = null;
+
+function assertNeonAuthEnv() {
+  const baseUrl = process.env.NEON_AUTH_BASE_URL?.trim();
+  const secret = process.env.NEON_AUTH_COOKIE_SECRET?.trim();
+
+  if (!baseUrl) {
     throw new Error(
-      'DATABASE_URL is not set. Add it as a secret on the Cloudflare Worker (crestar).',
+      'NEON_AUTH_BASE_URL is not set on the Worker. Enable Better Auth in the Neon Console (Branch → Auth) and copy the Auth URL.',
     );
   }
-  return new Pool({ connectionString });
-}
-
-let pool: Pool | null = null;
-function getPool() {
-  if (!pool) pool = createPool();
-  return pool;
-}
-
-const trustedOrigins = [
-  'https://crestarhq.com',
-  'https://www.crestarhq.com',
-  process.env.BETTER_AUTH_URL,
-  process.env.EXPO_PUBLIC_PROXY_BASE_URL,
-  ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(',').map((o) => o.trim()) ?? []),
-].filter((v): v is string => Boolean(v));
-
-async function generateAppleClientSecret(
-  clientId: string,
-  teamId: string,
-  keyId: string,
-  privateKeyPem: string,
-): Promise<string> {
-  const pem = privateKeyPem.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').trim();
-  const key = await importPKCS8(pem, 'ES256');
-  const now = Math.floor(Date.now() / 1000);
-  const exp = now + 180 * 24 * 60 * 60;
-
-  return new SignJWT({})
-    .setProtectedHeader({ alg: 'ES256', kid: keyId })
-    .setIssuer(teamId)
-    .setSubject(clientId)
-    .setAudience('https://appleid.apple.com')
-    .setIssuedAt(now)
-    .setExpirationTime(exp)
-    .sign(key);
-}
-
-function hasAppleDynamicCreds() {
-  return Boolean(
-    process.env.APPLE_CLIENT_ID &&
-      process.env.APPLE_TEAM_ID &&
-      process.env.APPLE_KEY_ID &&
-      process.env.APPLE_PRIVATE_KEY,
-  );
-}
-
-function hasAppleStaticSecret() {
-  return Boolean(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET);
-}
-
-const socialProviders: Record<string, unknown> = {
-  ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-    ? {
-        google: {
-          clientId: process.env.GOOGLE_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        },
-      }
-    : {}),
-};
-
-if (hasAppleDynamicCreds()) {
-  socialProviders.apple = async () => {
-    const clientId = process.env.APPLE_CLIENT_ID as string;
-    const clientSecret = await generateAppleClientSecret(
-      clientId,
-      process.env.APPLE_TEAM_ID as string,
-      process.env.APPLE_KEY_ID as string,
-      process.env.APPLE_PRIVATE_KEY as string,
-    );
-    return {
-      clientId,
-      clientSecret,
-      appBundleIdentifier: process.env.APPLE_APP_BUNDLE_IDENTIFIER || 'com.crestar.hq',
-    };
-  };
-} else if (hasAppleStaticSecret()) {
-  socialProviders.apple = {
-    clientId: process.env.APPLE_CLIENT_ID,
-    clientSecret: process.env.APPLE_CLIENT_SECRET,
-    appBundleIdentifier: process.env.APPLE_APP_BUNDLE_IDENTIFIER || 'com.crestar.hq',
-  };
-}
-
-async function verifyCompatiblePassword({
-  hash,
-  password,
-}: {
-  hash: string;
-  password: string;
-}) {
-  if (hash.startsWith('$argon2')) {
-    return argon2Verify({ hash, password });
-  }
-  return verifyPassword({ hash, password });
-}
-
-const cookieConfig = {
-  sameSite: 'none' as const,
-  secure: true,
-  httpOnly: true,
-  path: '/',
-};
-
-function assertAuthEnv() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL is not set on the Worker');
-  }
-  const authSecret = process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
-  if (!authSecret || authSecret.length < 16) {
+  if (!secret || secret.length < 32) {
     throw new Error(
-      'BETTER_AUTH_SECRET is missing or too short (set a 32+ char secret on the Worker)',
+      'NEON_AUTH_COOKIE_SECRET is missing or shorter than 32 characters. Set it on the Cloudflare Worker (openssl rand -base64 32).',
     );
   }
-  return authSecret;
+  return { baseUrl, secret };
 }
 
-let _auth: ReturnType<typeof betterAuth> | null = null;
-
-export function getAuth() {
+export function getAuth(): NeonAuth {
   if (_auth) return _auth;
-  const authSecret = assertAuthEnv();
-  _auth = betterAuth({
-    database: getPool(),
-    baseURL: process.env.BETTER_AUTH_URL || 'https://crestarhq.com',
-    trustedOrigins,
-    socialProviders: socialProviders as any,
-    secret: authSecret,
-    emailAndPassword: {
-      enabled: true,
-      requireEmailVerification: false,
-      password: {
-        verify: verifyCompatiblePassword,
-      },
+  const { baseUrl, secret } = assertNeonAuthEnv();
+  _auth = createNeonAuth({
+    baseUrl,
+    cookies: {
+      secret,
+      // Cross-site WebView / mobile need None+Secure when applicable;
+      // Neon SDK defaults are usually fine for same-origin crestarhq.com.
     },
-    hooks: {
-      before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== '/sign-up/email') return;
-        const body = ctx.body as { email?: unknown; name?: unknown } | undefined;
-        if (!body || typeof body.email !== 'string') return;
-        if (typeof body.name === 'string' && body.name.trim().length > 0) return;
-        const derived = body.email.split('@')[0];
-        body.name = derived && derived.length > 0 ? derived : 'User';
-      }),
-    },
-    advanced: {
-      cookiePrefix: 'better-auth',
-      defaultCookieAttributes: cookieConfig,
-      cookies: {
-        sessionToken: {
-          attributes: {
-            sameSite: cookieConfig.sameSite,
-            secure: cookieConfig.secure,
-          },
-        },
-      },
-    },
-    session: {
-      cookieCache: {
-        enabled: true,
-        maxAge: 60 * 60 * 24 * 7,
-      },
-    },
-    user: {
-      additionalFields: {
-        image: {
-          type: 'string',
-          required: false,
-        },
-      },
-    },
-    plugins: [bearer()],
+    logLevel: process.env.NODE_ENV === 'production' ? 'warn' : 'debug',
   });
   return _auth;
 }
 
-/** Lazy proxy so static imports do not force env during build */
-export const auth = new Proxy({} as ReturnType<typeof betterAuth>, {
+/**
+ * Compatibility surface:
+ * - auth.handler() → Neon route handlers
+ * - auth.getSession() → Neon SDK
+ * - auth.api.getSession({ headers }) → legacy Crestar / Anything callers
+ * - auth.signIn / signUp / signOut → Neon SDK methods
+ */
+export const auth = new Proxy({} as NeonAuth & {
+  api: {
+    getSession: (opts?: { headers?: Headers }) => Promise<unknown>;
+  };
+}, {
   get(_target, prop, receiver) {
     const instance = getAuth();
+
+    if (prop === 'api') {
+      return {
+        async getSession(_opts?: { headers?: Headers }) {
+          try {
+            const result = await instance.getSession();
+            // Neon returns { data, error }; legacy code expects session | null
+            return result?.data ?? null;
+          } catch (err) {
+            console.error('[auth] getSession failed:', err);
+            return null;
+          }
+        },
+      };
+    }
+
     const value = Reflect.get(instance as object, prop, receiver);
     return typeof value === 'function' ? value.bind(instance) : value;
   },
 });
 
-export type Session = ReturnType<typeof getAuth>['$Infer']['Session'];
+export type Session = Awaited<ReturnType<NeonAuth['getSession']>> extends {
+  data: infer D;
+}
+  ? D
+  : unknown;

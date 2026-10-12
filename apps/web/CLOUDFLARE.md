@@ -1,7 +1,8 @@
 # Cloudflare deployment (Crestar web)
 
-Worker name: `crestar`
-Domain: crestarhq.com
+Worker name: `crestar`  
+Domain: crestarhq.com  
+Auth: **Neon Managed Better Auth**
 
 ## Cloudflare dashboard (Workers & Pages → crestar)
 
@@ -16,13 +17,30 @@ Do **not** use bare `npx wrangler deploy` (triggers interactive OpenNext migrati
 
 ## Required Worker secrets / vars
 
-- `DATABASE_URL` (secret)
-- `BETTER_AUTH_SECRET` (secret)
-- `BETTER_AUTH_URL` = `https://crestarhq.com`
-- `BETTER_AUTH_TRUSTED_ORIGINS` = `https://crestarhq.com,https://www.crestarhq.com`
+### Auth (Neon Managed Better Auth)
+
+| Name | Type | Where to get it |
+|------|------|------------------|
+| `NEON_AUTH_BASE_URL` | Secret or var | Neon Console → your branch → **Auth** / **Better Auth** → Auth URL (looks like `https://ep-xxx.neonauth..../neondb/auth`) |
+| `NEON_AUTH_COOKIE_SECRET` | Secret | Generate: `openssl rand -base64 32` (must be **≥ 32 characters**) |
+
+Also in Neon Console for production:
+
+1. **Trusted domains**: add `https://crestarhq.com` and `https://www.crestarhq.com`
+2. Enable **email/password** sign-in
+3. Optional: Google / Apple OAuth with your own client IDs
+
+### App data & media
+
+- `DATABASE_URL` (secret) — Neon pooled connection string
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (secrets)
 - `R2_BUCKET` = `crestar-media`
 - `R2_PUBLIC_BASE_URL` = `https://media.crestarhq.com`
-- Paystack / Apple / Google keys as in `.env.example`
+- Paystack / Apple / Google keys as needed
 
-`nodejs_compat` is enabled in `wrangler.jsonc`. Password verify for legacy hashes uses `argon2-wasm-edge`.
+`nodejs_compat` is enabled in `wrangler.jsonc`.
+
+## Verify
+
+After deploy: `https://crestarhq.com/api/health`  
+Expect `"auth":"neon-managed-better-auth"` and all checks `true`.

@@ -1,32 +1,27 @@
 /**
- * Better Auth catch-all handler (Crestar).
- *
- * Handlers are created on first request so `next build` / OpenNext does not
- * require DATABASE_URL or BETTER_AUTH_SECRET at build time.
- *
- * If Worker secrets are missing, return a clear JSON 500 instead of an empty body.
+ * Neon Managed Better Auth catch-all.
+ * Proxies all /api/auth/* traffic to the Neon Auth base URL.
  */
 import { getAuth } from '@/lib/auth';
-import { toNextJsHandler } from 'better-auth/next-js';
 
-let handlers: ReturnType<typeof toNextJsHandler> | null = null;
-
-function missingEnvMessage(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes('DATABASE_URL')) {
-    return 'DATABASE_URL is not set on the Cloudflare Worker. Set it under Workers & Pages → crestar → Settings → Variables and Secrets.';
-  }
-  if (msg.includes('BETTER_AUTH_SECRET') || msg.includes('AUTH_SECRET')) {
-    return 'BETTER_AUTH_SECRET is not set (or too short) on the Cloudflare Worker. Set a 32+ character secret under Workers & Pages → crestar → Settings → Variables and Secrets.';
-  }
-  return msg || 'Auth failed to initialize';
-}
+let handlers: ReturnType<ReturnType<typeof getAuth>['handler']> | null = null;
 
 function getHandlers() {
   if (!handlers) {
-    handlers = toNextJsHandler(getAuth());
+    handlers = getAuth().handler();
   }
   return handlers;
+}
+
+function missingEnvMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('NEON_AUTH_BASE_URL')) {
+    return 'NEON_AUTH_BASE_URL is not set on the Cloudflare Worker. Enable Better Auth in Neon Console and set the Auth URL as a Worker secret/var.';
+  }
+  if (msg.includes('NEON_AUTH_COOKIE_SECRET')) {
+    return 'NEON_AUTH_COOKIE_SECRET is missing or too short (32+ chars) on the Cloudflare Worker.';
+  }
+  return msg || 'Auth failed to initialize';
 }
 
 async function safeHandle(
@@ -34,10 +29,13 @@ async function safeHandle(
   request: Request,
 ): Promise<Response> {
   try {
-    const h = getHandlers();
+    const h = getHandlers() as {
+      GET: (req: Request) => Promise<Response>;
+      POST: (req: Request) => Promise<Response>;
+    };
     return await h[method](request);
   } catch (err) {
-    console.error('[auth] handler init/request failed:', err);
+    console.error('[auth] Neon Auth handler failed:', err);
     return Response.json(
       {
         error: 'AUTH_INIT_FAILED',

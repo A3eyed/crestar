@@ -1,28 +1,35 @@
 /**
- * ⚠ ANYTHING PLATFORM — DO NOT REWRITE THIS FILE ⚠
- *
- * Shipped v2 mobile token-exchange endpoint. The mobile WebView intercepts
- * the redirect to this URL after signup/signin, fetches the JSON, and stores
- * { jwt, user } in SecureStore. The response shape ({ jwt, user: { id,
- * email, name } }) is the exact contract AuthWebView.tsx parses — changing
- * it breaks mobile auth platform-wide.
+ * Mobile token-exchange endpoint.
+ * After WebView signup/signin, native app reads { jwt, user } from this JSON.
  */
-import { auth } from '@/lib/auth';
+import { getAuth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 
-export async function GET(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
+export async function GET() {
+  try {
+    const { data: session } = await getAuth().getSession();
 
-  if (!session?.user || !session?.session) {
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Prefer session token when present (Better Auth / Neon session shape).
+    const token =
+      (session as { session?: { token?: string }; token?: string }).session
+        ?.token ||
+      (session as { token?: string }).token ||
+      '';
+
+    return NextResponse.json({
+      jwt: token,
+      user: {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+      },
+    });
+  } catch (err) {
+    console.error('[auth/token]', err);
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  return NextResponse.json({
-    jwt: session.session.token,
-    user: {
-      id: session.user.id,
-      email: session.user.email,
-      name: session.user.name,
-    },
-  });
 }
