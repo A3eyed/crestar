@@ -20,5 +20,6 @@
 “observability”: {
 “enabled”: true
 },
-“vars”: {}
+"vars": {
+  "APP_ENV": "production"
 }
