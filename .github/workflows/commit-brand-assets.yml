@@ -1,0 +1,95 @@
+name: Commit brand assets
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  brand:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Pillow
+        run: pip install pillow
+
+      - name: Download logo and generate icons + text splash
+        run: |
+          python3 << 'PY'
+          import urllib.request
+          from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFont
+
+          logo_url = 'https://litter.catbox.moe/dw8g1d.png'
+          src_path = Path('/tmp/crestar-logo-src.png')
+          urllib.request.urlretrieve(logo_url, src_path)
+          src = Image.open(src_path).convert('RGBA')
+
+          def save_icon(size, path, colors=128):
+              path = Path(path)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              im = src.resize((size, size), Image.Resampling.LANCZOS)
+              bg = Image.new('RGBA', im.size, (0, 0, 0, 255))
+              composed = Image.alpha_composite(bg, im).convert('RGB')
+              q = composed.quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
+              q.save(path, 'PNG', optimize=True)
+              print('wrote', path, path.stat().st_size)
+
+          save_icon(1024, 'apps/mobile/assets/images/icon.png', colors=64)
+          save_icon(1024, 'apps/mobile/assets/images/adaptive-icon.png', colors=64)
+          save_icon(512, 'apps/web/public/logo.png')
+          save_icon(512, 'apps/web/public/icon-512.png')
+          save_icon(192, 'apps/web/public/icon-192.png')
+          save_icon(32, 'apps/web/public/favicon.png')
+          save_icon(48, 'apps/mobile/assets/images/favicon.png')
+
+          def make_splash(bg, fg, path, size=512):
+              path = Path(path)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              im = Image.new('RGB', (size, size), bg)
+              draw = ImageDraw.Draw(im)
+              try:
+                  font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 56)
+              except Exception:
+                  font = ImageFont.load_default()
+              text = 'CRESTAR'
+              bbox = draw.textbbox((0, 0), text, font=font)
+              tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+              draw.text(((size - tw) // 2, (size - th) // 2), text, fill=fg, font=font)
+              im.save(path, 'PNG', optimize=True)
+              print('wrote', path, path.stat().st_size)
+
+          # System light/dark splash: spelled CRESTAR, not the logo mark
+          make_splash('#000000', '#FFFFFF', 'apps/mobile/assets/images/splash-icon.png')
+          make_splash('#FFFFFF', '#000000', 'apps/mobile/assets/images/splash-light.png')
+          print('brand assets ready')
+          PY
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/public/logo.png \
+                  apps/web/public/icon-512.png \
+                  apps/web/public/icon-192.png \
+                  apps/web/public/favicon.png \
+                  apps/mobile/assets/images/icon.png \
+                  apps/mobile/assets/images/adaptive-icon.png \
+                  apps/mobile/assets/images/favicon.png \
+                  apps/mobile/assets/images/splash-icon.png \
+                  apps/mobile/assets/images/splash-light.png
+          if git diff --cached --quiet; then
+            echo "No brand file changes"
+          else
+            git commit -m "brand: Crestar copper star app/web icons + CRESTAR text splash (light/dark)"
+            git push origin HEAD:main
+          fi
