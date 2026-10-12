@@ -1,9 +1,10 @@
 /**
- * ⚠ ANYTHING PLATFORM — DO NOT REWRITE THIS FILE ⚠
- *
- * Shipped v2 better-auth catch-all handler.
+ * Better Auth catch-all handler (Crestar).
  */
-import { auth } from '@/lib/auth';
+import { getAuth } from '@/lib/auth';
 import { toNextJsHandler } from 'better-auth/next-js';
 
-export const { GET, POST } = toNextJsHandler(auth);
+const handler = toNextJsHandler(getAuth());
+
+export const GET = handler.GET;
+export const POST = handler.POST;
