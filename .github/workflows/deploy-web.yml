@@ -23,6 +23,9 @@ jobs:
           yarn --version
           node --version
 
+      - name: Decode brand assets
+        run: node scripts/decode-brand-assets.mjs
+
       - name: Install dependencies (immutable)
         run: yarn install --immutable
 
@@ -45,13 +48,8 @@ jobs:
             echo "CLOUDFLARE_ACCOUNT_ID secret is missing"
             exit 1
           fi
-          # Strip CR/LF/spaces that break HTTP Authorization headers
           TOKEN=$(printf '%s' "$RAW_TOKEN" | tr -d '\r\n' | xargs)
           ACCOUNT=$(printf '%s' "$RAW_ACCOUNT" | tr -d '\r\n' | xargs)
-          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
-            echo "Cloudflare credentials empty after trim"
-            exit 1
-          fi
           echo "::add-mask::$TOKEN"
           echo "CLOUDFLARE_API_TOKEN=$TOKEN" >> "$GITHUB_ENV"
           echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT" >> "$GITHUB_ENV"
