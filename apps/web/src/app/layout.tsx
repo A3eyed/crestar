@@ -3,8 +3,10 @@ import type { ReactNode } from 'react';
 import { Providers } from './providers';
 import CurrencyRateRefresher from '@/components/CurrencyRateRefresher';
 
+const SITE_URL = 'https://crestarhq.com';
+
 export const metadata = {
-  metadataBase: new URL('https://crestar.created.app'),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: 'Crestar — Shop, Create, Earn Together',
     template: '%s | Crestar',
@@ -27,6 +29,14 @@ export const metadata = {
   applicationName: 'Crestar',
   authors: [{ name: 'Crestar' }],
   category: 'shopping',
+  icons: {
+    icon: [
+      { url: '/favicon.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+  },
   openGraph: {
     type: 'website',
     siteName: 'Crestar',
@@ -37,10 +47,10 @@ export const metadata = {
     locale: 'en_US',
     images: [
       {
-        url: '/favicon.png',
-        width: 512,
-        height: 512,
-        alt: 'Crestar — social commerce platform',
+        url: '/logo.png',
+        width: 1024,
+        height: 1024,
+        alt: 'Crestar logo',
       },
     ],
   },
@@ -49,7 +59,7 @@ export const metadata = {
     title: 'Crestar — Shop, Create, Earn Together',
     description:
       'Buy and sell through live video, connect with sellers, and earn from your content on Crestar.',
-    images: ['/favicon.png'],
+    images: ['/logo.png'],
   },
   robots: {
     index: true,
@@ -67,31 +77,30 @@ export const metadata = {
   },
 };
 
-// JSON-LD structured data — helps search engines understand and rank Crestar
 const structuredData = {
   '@context': 'https://schema.org',
   '@graph': [
     {
       '@type': 'Organization',
-      '@id': 'https://crestar.created.app/#organization',
+      '@id': `${SITE_URL}/#organization`,
       name: 'Crestar',
-      url: 'https://crestar.created.app',
-      logo: 'https://crestar.created.app/favicon.png',
+      url: SITE_URL,
+      logo: `${SITE_URL}/logo.png`,
       description:
         'Crestar is the social commerce platform built for Africa and beyond — buy and sell through short videos and live shopping, order food, and earn from your content.',
     },
     {
       '@type': 'WebSite',
-      '@id': 'https://crestar.created.app/#website',
+      '@id': `${SITE_URL}/#website`,
       name: 'Crestar',
       alternateName: 'Crestar — Shop, Create, Earn Together',
-      url: 'https://crestar.created.app',
-      publisher: { '@id': 'https://crestar.created.app/#organization' },
+      url: SITE_URL,
+      publisher: { '@id': `${SITE_URL}/#organization` },
       potentialAction: {
         '@type': 'SearchAction',
         target: {
           '@type': 'EntryPoint',
-          urlTemplate: 'https://crestar.created.app/shop?q={search_term_string}',
+          urlTemplate: `${SITE_URL}/shop?q={search_term_string}`,
         },
         'query-input': 'required name=search_term_string',
       },
