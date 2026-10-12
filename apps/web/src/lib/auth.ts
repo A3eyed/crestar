@@ -3,6 +3,8 @@
  *
  * Cloudflare Workers: use the platform WebSocket (do NOT import Node `ws`).
  * Node local/dev: polyfill WebSocket via `ws` only when global WebSocket is missing.
+ *
+ * Env is only required at request time, not during `next build`.
  */
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { argon2Verify } from 'argon2-wasm-edge';
@@ -12,15 +14,13 @@ import { verifyPassword } from 'better-auth/crypto';
 import { bearer } from 'better-auth/plugins';
 import { importPKCS8, SignJWT } from 'jose';
 
-// Neon Pool uses WebSockets. Workers already provide WebSocket globally.
 if (typeof WebSocket === 'undefined') {
-  // Node.js only — dynamic require so the Workers bundle does not load `ws`
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const wsModule = require('ws');
     neonConfig.webSocketConstructor = wsModule;
   } catch {
-    // leave unset; Neon will error clearly if WebSocket is unavailable
+    // ignore at build time
   }
 } else {
   neonConfig.webSocketConstructor = WebSocket;
@@ -36,9 +36,6 @@ function createPool() {
   return new Pool({ connectionString });
 }
 
-// One pool per isolate is OK for long-lived Node; on Workers the serverless
-// driver still expects connect/query within the request. Pool is created lazily
-// so missing env fails with a clear message instead of an opaque 500 at import.
 let pool: Pool | null = null;
 function getPool() {
   if (!pool) pool = createPool();
@@ -86,8 +83,6 @@ function hasAppleDynamicCreds() {
 function hasAppleStaticSecret() {
   return Boolean(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET);
 }
-
-const appleEnabled = hasAppleDynamicCreds() || hasAppleStaticSecret();
 
 const socialProviders: Record<string, unknown> = {
   ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
@@ -143,25 +138,24 @@ const cookieConfig = {
   path: '/',
 };
 
-const authSecret = process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
-
 function assertAuthEnv() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is not set on the Worker');
   }
+  const authSecret = process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
   if (!authSecret || authSecret.length < 16) {
     throw new Error(
       'BETTER_AUTH_SECRET is missing or too short (set a 32+ char secret on the Worker)',
     );
   }
+  return authSecret;
 }
 
-// Lazy init so OpenNext can load the module; first request validates env.
 let _auth: ReturnType<typeof betterAuth> | null = null;
 
 export function getAuth() {
   if (_auth) return _auth;
-  assertAuthEnv();
+  const authSecret = assertAuthEnv();
   _auth = betterAuth({
     database: getPool(),
     baseURL: process.env.BETTER_AUTH_URL || 'https://crestarhq.com',
@@ -216,7 +210,7 @@ export function getAuth() {
   return _auth;
 }
 
-/** @deprecated Prefer getAuth() — kept for existing imports */
+/** Lazy proxy so static imports do not force env during build */
 export const auth = new Proxy({} as ReturnType<typeof betterAuth>, {
   get(_target, prop, receiver) {
     const instance = getAuth();
@@ -225,4 +219,4 @@ export const auth = new Proxy({} as ReturnType<typeof betterAuth>, {
   },
 });
 
-export type Session = typeof auth.$Infer.Session;
+export type Session = ReturnType<typeof getAuth>['$Infer']['Session'];
