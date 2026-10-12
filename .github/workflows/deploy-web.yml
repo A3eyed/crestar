@@ -3,6 +3,9 @@ name: Deploy web to Cloudflare
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -10,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -26,13 +31,29 @@ jobs:
       - name: Decode brand assets
         run: node scripts/decode-brand-assets.mjs
 
-      - name: Install dependencies (immutable)
-        run: yarn install --immutable
+      - name: Install dependencies
+        run: |
+          # Allow lockfile update when package.json gained deps (e.g. @neondatabase/auth)
+          yarn install
+
+      - name: Commit updated yarn.lock if changed
+        run: |
+          if git diff --quiet yarn.lock; then
+            echo "yarn.lock unchanged"
+          else
+            git config user.name "crestar-ci"
+            git config user.email "ci@crestarhq.com"
+            git add yarn.lock
+            git commit -m "chore: update yarn.lock for workspace deps"
+            git push origin HEAD:main
+          fi
 
       - name: Build OpenNext Worker
         working-directory: apps/web
         run: yarn cf:build
         env:
+          NEON_AUTH_BASE_URL: ${{ secrets.NEON_AUTH_BASE_URL }}
+          NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}
           BETTER_AUTH_URL: https://crestarhq.com
 
       - name: Sanitize Cloudflare credentials
