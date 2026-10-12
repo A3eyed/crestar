@@ -26,3 +26,12 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
+
+// OpenNext Cloudflare: integrate bindings in local `next dev` when available.
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { initOpenNextCloudflareForDev } = require('@opennextjs/cloudflare');
+  initOpenNextCloudflareForDev();
+} catch {
+  // Package may be absent in non-Cloudflare environments.
+}
