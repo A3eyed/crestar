@@ -33,7 +33,9 @@ jobs:
           corepack prepare yarn@4.12.0 --activate
           yarn --version
 
-      - name: Refresh yarn.lock
+      - name: Refresh yarn.lock (mutable install — intentional)
+        env:
+          YARN_ENABLE_IMMUTABLE_INSTALLS: 'false'
         run: yarn install
 
       - name: Commit lockfile if changed
