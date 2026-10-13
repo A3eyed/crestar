@@ -1,95 +1,7 @@
 // @ts-nocheck
 import sql from '@/app/api/utils/sql';
-import { resolveUserId } from '@/app/api/utils/auth';
-
-/**
- * Provision Crestar profile row from Neon Auth "user".
- * Only touches columns that exist on a stock Better Auth user table
- * (id, email, name, image) — extra Crestar columns on "user" are optional.
- */
-async function ensureProfileRow(userId) {
-  // Prefer a full insert from "user"; fall back if optional columns missing
-  try {
-    await sql`
-      INSERT INTO auth_users (id, email, name, username, display_name, profile_image)
-      SELECT
-        u.id,
-        u.email,
-        u.name,
-        LOWER(
-          REGEXP_REPLACE(
-            COALESCE(NULLIF(u.username, ''), split_part(u.email, '@', 1)),
-            '[^a-zA-Z0-9._]',
-            '',
-            'g'
-          )
-        ),
-        COALESCE(NULLIF(u.name, ''), split_part(u.email, '@', 1)),
-        u.image
-      FROM "user" u
-      WHERE u.id = ${userId}
-        AND NOT EXISTS (SELECT 1 FROM auth_users a WHERE a.id = u.id)
-    `;
-    return;
-  } catch (e) {
-    console.warn('[profile] ensureProfileRow primary insert failed, trying minimal:', e?.message);
-  }
-
-  try {
-    await sql`
-      INSERT INTO auth_users (id, email, name, username, display_name)
-      SELECT
-        u.id,
-        u.email,
-        u.name,
-        LOWER(REGEXP_REPLACE(split_part(u.email, '@', 1), '[^a-zA-Z0-9._]', '', 'g')),
-        COALESCE(NULLIF(u.name, ''), split_part(u.email, '@', 1))
-      FROM "user" u
-      WHERE u.id = ${userId}
-        AND NOT EXISTS (SELECT 1 FROM auth_users a WHERE a.id = u.id)
-    `;
-  } catch (e) {
-    console.error('[profile] ensureProfileRow minimal insert failed:', e?.message);
-    throw e;
-  }
-}
-
-async function syncNeonUser(userId, { displayName, profileImage, email }) {
-  // Only update columns that always exist on Managed Better Auth "user"
-  try {
-    if (displayName != null && displayName !== '') {
-      await sql`
-        UPDATE "user"
-        SET name = ${displayName}, "updatedAt" = NOW()
-        WHERE id = ${userId}
-      `;
-    }
-  } catch (e) {
-    console.warn('[profile] sync name failed:', e?.message);
-  }
-  try {
-    if (profileImage != null && profileImage !== '') {
-      await sql`
-        UPDATE "user"
-        SET image = ${profileImage}, "updatedAt" = NOW()
-        WHERE id = ${userId}
-      `;
-    }
-  } catch (e) {
-    console.warn('[profile] sync image failed:', e?.message);
-  }
-  try {
-    if (email != null && email !== '') {
-      await sql`
-        UPDATE "user"
-        SET email = ${email}, "updatedAt" = NOW()
-        WHERE id = ${userId}
-      `;
-    }
-  } catch (e) {
-    console.warn('[profile] sync email failed:', e?.message);
-  }
-}
+import { resolveUserId, getSession } from '@/app/api/utils/auth';
+import { ensureAppUser } from '@/app/api/utils/ensureAppUser';
 
 export async function POST(request) {
   try {
@@ -107,7 +19,12 @@ export async function POST(request) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await ensureProfileRow(userId);
+    const session = await getSession(request);
+    await ensureAppUser(userId, {
+      email: session?.user?.email,
+      name: session?.user?.name,
+      image: session?.user?.image,
+    });
 
     if (displayName && displayName.length > 30) {
       return Response.json(
@@ -138,7 +55,6 @@ export async function POST(request) {
       }
     }
 
-    // Explicit field updates (avoid COALESCE swallowing intentional clears incorrectly)
     const [updatedUser] = await sql`
       UPDATE auth_users
       SET
@@ -154,13 +70,23 @@ export async function POST(request) {
     `;
 
     if (!updatedUser) {
-      return Response.json(
-        { error: 'Profile row not found after provision. Please try again.' },
-        { status: 404 },
-      );
+      return Response.json({ error: 'Profile row not found' }, { status: 404 });
     }
 
-    await syncNeonUser(userId, { displayName, profileImage, email });
+    // Best-effort sync to Neon Auth name/image (public API preferred later)
+    try {
+      if (displayName) {
+        await sql`UPDATE neon_auth."user" SET name = ${displayName}, "updatedAt" = NOW() WHERE id = ${userId}`;
+      }
+    } catch {
+      try {
+        if (displayName) {
+          await sql`UPDATE neon_auth.user SET name = ${displayName}, "updatedAt" = NOW() WHERE id = ${userId}`;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
 
     return Response.json({
       success: true,
@@ -183,7 +109,12 @@ export async function GET(request) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await ensureProfileRow(userId);
+    const session = await getSession(request);
+    await ensureAppUser(userId, {
+      email: session?.user?.email,
+      name: session?.user?.name,
+      image: session?.user?.image,
+    });
 
     const [user] = await sql`
       SELECT
@@ -218,7 +149,7 @@ export async function GET(request) {
       followers_count = fc?.followers ?? 0;
       following_count = fc?.following ?? 0;
     } catch {
-      // follows optional
+      /* optional */
     }
 
     let canChangeUsernameIn = 0;

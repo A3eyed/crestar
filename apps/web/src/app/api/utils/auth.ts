@@ -1,28 +1,43 @@
 import { getAuthAsync } from '@/lib/auth';
+import { ensureAppUser } from '@/app/api/utils/ensureAppUser';
 
 /**
  * Resolve user ID from web session cookie (Neon Managed Better Auth).
- * Always uses getAuthAsync so the SDK is initialized on cold Workers isolates.
  */
 export async function resolveUserId(request: Request): Promise<string | null> {
   try {
     const auth = await getAuthAsync();
 
-    // Preferred: SDK session (reads Next cookies()/headers in App Router)
     try {
       const result = await auth.getSession();
       const id = result?.data?.user?.id;
-      if (id) return String(id);
+      if (id) {
+        const user = result.data.user;
+        // Provision Crestar profile row so downstream FKs work
+        await ensureAppUser(String(id), {
+          email: user?.email,
+          name: user?.name,
+          image: user?.image,
+        }).catch((e) => console.warn('[resolveUserId] ensureAppUser:', e?.message));
+        return String(id);
+      }
     } catch (e) {
       console.error('[auth] getSession failed:', e);
     }
 
-    // Fallback: compatibility shim used elsewhere in the app
     try {
       const { auth: authProxy } = await import('@/lib/auth');
       const legacy = await authProxy.api.getSession({ headers: request.headers });
       const userId = (legacy as { user?: { id?: string } } | null)?.user?.id;
-      if (userId) return String(userId);
+      if (userId) {
+        const u = legacy as { user?: { email?: string; name?: string; image?: string } };
+        await ensureAppUser(String(userId), {
+          email: u?.user?.email,
+          name: u?.user?.name,
+          image: u?.user?.image,
+        }).catch(() => {});
+        return String(userId);
+      }
     } catch (e) {
       console.error('[auth] legacy getSession failed:', e);
     }

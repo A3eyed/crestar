@@ -1,44 +1,7 @@
 // @ts-nocheck
 import sql from '@/app/api/utils/sql';
-import { resolveUserId } from '@/app/api/utils/auth';
-
-async function ensureProfileRow(userId) {
-  try {
-    await sql`
-      INSERT INTO auth_users (id, email, name, username, display_name, profile_image)
-      SELECT
-        u.id,
-        u.email,
-        u.name,
-        LOWER(
-          REGEXP_REPLACE(
-            COALESCE(NULLIF(u.username, ''), split_part(u.email, '@', 1)),
-            '[^a-zA-Z0-9._]',
-            '',
-            'g'
-          )
-        ),
-        COALESCE(NULLIF(u.name, ''), split_part(u.email, '@', 1)),
-        u.image
-      FROM "user" u
-      WHERE u.id = ${userId}
-        AND NOT EXISTS (SELECT 1 FROM auth_users a WHERE a.id = u.id)
-    `;
-  } catch {
-    await sql`
-      INSERT INTO auth_users (id, email, name, username, display_name)
-      SELECT
-        u.id,
-        u.email,
-        u.name,
-        LOWER(REGEXP_REPLACE(split_part(u.email, '@', 1), '[^a-zA-Z0-9._]', '', 'g')),
-        COALESCE(NULLIF(u.name, ''), split_part(u.email, '@', 1))
-      FROM "user" u
-      WHERE u.id = ${userId}
-        AND NOT EXISTS (SELECT 1 FROM auth_users a WHERE a.id = u.id)
-    `;
-  }
-}
+import { resolveUserId, getSession } from '@/app/api/utils/auth';
+import { ensureAppUser } from '@/app/api/utils/ensureAppUser';
 
 /** POST /api/profile/update-username — TikTok-style handle */
 export async function POST(request) {
@@ -54,7 +17,12 @@ export async function POST(request) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await ensureProfileRow(userId);
+    const session = await getSession(request);
+    await ensureAppUser(userId, {
+      email: session?.user?.email,
+      name: session?.user?.name,
+      image: session?.user?.image,
+    });
 
     const usernameRegex = /^[a-z0-9_.]{2,24}$/;
     if (!usernameRegex.test(username)) {
@@ -133,13 +101,6 @@ export async function POST(request) {
       WHERE id = ${userId}
       RETURNING id, username, email, display_name, bio, profile_image, name
     `;
-
-    // Best-effort sync to Neon Auth user.username if column exists
-    try {
-      await sql`UPDATE "user" SET username = ${username}, "updatedAt" = NOW() WHERE id = ${userId}`;
-    } catch {
-      // username column may not exist on Managed Auth user table
-    }
 
     return Response.json({ success: true, user: updatedUser });
   } catch (error) {
