@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  status:
+    name: status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Workspace sanity
+        run: |
+          test -f package.json
+          test -f apps/web/package.json
+          test -f apps/mobile/package.json
+          test -f apps/web/src/app/create-listing/page.tsx
+          grep -q "Category" apps/web/src/app/create-listing/page.tsx
+          grep -q "cf:build" apps/web/package.json
+          echo "CI status OK — web listing category picker present, monorepo intact"

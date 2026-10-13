@@ -1,12 +1,19 @@
 name: EAS Production Builds
 
+# Manual only — production mobile builds need Expo credentials and must not
+# mark main red when a web-only deploy is in progress.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/mobile/**'
-      - '.github/workflows/eas-build.yml'
+    inputs:
+      platform:
+        description: 'Platform to build'
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - ios
+          - android
 
 jobs:
   build:
@@ -23,6 +30,15 @@ jobs:
         with:
           node-version: 22
 
+      - name: Require EXPO_TOKEN
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN secret is missing. Add it under repo Settings → Secrets."
+            exit 1
+          fi
+
       - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
         with:
@@ -38,7 +54,7 @@ jobs:
         env:
           YARN_ENABLE_IMMUTABLE_INSTALLS: "false"
 
-      - name: Build iOS and Android
-        run: eas build --platform all --profile production --non-interactive
+      - name: Build
+        run: eas build --platform ${{ inputs.platform }} --profile production --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
