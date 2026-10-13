@@ -19,9 +19,16 @@
       "service": "crestar"
     }
   ],
+  // Public (non-secret) runtime vars — safe to commit.
+  // Secrets must NOT go here. Set them in the dashboard as Secrets, or:
+  //   npx wrangler secret put NEON_AUTH_BASE_URL
+  //   npx wrangler secret put NEON_AUTH_COOKIE_SECRET
+  //   npx wrangler secret put DATABASE_URL
+  "vars": {
+    "BETTER_AUTH_URL": "https://crestarhq.com",
+    "NEXT_PUBLIC_APP_URL": "https://crestarhq.com"
+  },
   "observability": {
     "enabled": true
   }
-  // Secrets (NEON_AUTH_*, DATABASE_URL, etc.) must be set in the dashboard or
-  // via `wrangler secret put`. Do not put secret values in this file.
 }
