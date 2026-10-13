@@ -1,28 +1,26 @@
 // @ts-nocheck
 /**
  * Bridge Neon Managed Better Auth → Crestar app tables.
- *
  * Neon stores identity in neon_auth.user / neon_auth.account.
- * Crestar product tables (auth_users, business_centers, wallets, etc.)
- * live in public. Every authenticated request that touches app data
- * must call ensureAppUser first.
+ * Crestar product tables live in public.
  */
 import sql from '@/app/api/utils/sql';
+import { ensureCoreSchema } from '@/app/api/utils/ensureSchema';
 
 function slugFromEmail(email) {
   const local = String(email || 'user').split('@')[0] || 'user';
-  return local
-    .toLowerCase()
-    .replace(/[^a-z0-9._]/g, '')
-    .slice(0, 24) || 'user';
+  return (
+    local
+      .toLowerCase()
+      .replace(/[^a-z0-9._]/g, '')
+      .slice(0, 24) || 'user'
+  );
 }
 
-/**
- * Ensure a row exists in public.auth_users for this Neon Auth user id.
- * Source order: existing auth_users → neon_auth.user → public.user → session hints.
- */
 export async function ensureAppUser(userId, hints = {}) {
   if (!userId) return null;
+
+  await ensureCoreSchema();
 
   const [existing] = await sql`
     SELECT id, email, name, username, display_name, profile_image, role, is_verified
@@ -31,14 +29,13 @@ export async function ensureAppUser(userId, hints = {}) {
   `;
   if (existing) return existing;
 
-  // Preferred source: Neon Managed Auth schema
   let email = hints.email || null;
   let name = hints.name || null;
   let image = hints.image || null;
 
   try {
     const [nu] = await sql`
-      SELECT id, email, name, image, "emailVerified"
+      SELECT id, email, name, image
       FROM neon_auth."user"
       WHERE id = ${userId}
     `;
@@ -47,13 +44,10 @@ export async function ensureAppUser(userId, hints = {}) {
       name = name || nu.name;
       image = image || nu.image;
     }
-  } catch (e) {
-    // Schema may be neon_auth.user without quotes depending on creation
+  } catch {
     try {
       const [nu2] = await sql`
-        SELECT id, email, name, image
-        FROM neon_auth.user
-        WHERE id = ${userId}
+        SELECT id, email, name, image FROM neon_auth.user WHERE id = ${userId}
       `;
       if (nu2) {
         email = email || nu2.email;
@@ -61,11 +55,10 @@ export async function ensureAppUser(userId, hints = {}) {
         image = image || nu2.image;
       }
     } catch (e2) {
-      console.warn('[ensureAppUser] neon_auth.user read failed:', e2?.message || e?.message);
+      console.warn('[ensureAppUser] neon_auth.user read failed:', e2?.message);
     }
   }
 
-  // Legacy public.user (pre-Neon-Auth installs)
   try {
     const [pu] = await sql`
       SELECT id, email, name, image FROM "user" WHERE id = ${userId}
@@ -76,12 +69,11 @@ export async function ensureAppUser(userId, hints = {}) {
       image = image || pu.image;
     }
   } catch {
-    // ignore
+    /* ignore */
   }
 
   if (!email && !name) {
-    // Last resort: still create a shell so FKs work
-    email = `user-${userId.slice(0, 8)}@crestar.local`;
+    email = `user-${String(userId).slice(0, 8)}@crestar.local`;
     name = 'Crestar User';
   }
 
@@ -110,8 +102,7 @@ export async function ensureAppUser(userId, hints = {}) {
       RETURNING id, email, name, username, display_name, profile_image, role, is_verified
     `;
     return row;
-  } catch (e) {
-    // Username unique collision — retry with suffix
+  } catch {
     const alt = `${username}${String(userId).replace(/\D/g, '').slice(-4) || '1'}`.slice(0, 24);
     const [row] = await sql`
       INSERT INTO auth_users (
@@ -135,14 +126,10 @@ export async function ensureAppUser(userId, hints = {}) {
   }
 }
 
-/**
- * Ensure identity + wallet for seller/creator/deliverer features.
- * Does not require a public."user" row.
- */
 export async function ensureIdentity(userId) {
   if (!userId) throw new Error('userId required');
+  await ensureCoreSchema();
 
-  // Existing link?
   try {
     const [link] = await sql`
       SELECT identity_id FROM identity_accounts
@@ -155,7 +142,27 @@ export async function ensureIdentity(userId) {
     console.warn('[ensureIdentity] identity_accounts read:', e?.message);
   }
 
-  // Create identity
+  // Also check auth_users.identity_id
+  try {
+    const [au] = await sql`
+      SELECT identity_id FROM auth_users WHERE id = ${userId} AND identity_id IS NOT NULL
+    `;
+    if (au?.identity_id) {
+      try {
+        await sql`
+          INSERT INTO identity_accounts (identity_id, user_id, is_primary)
+          VALUES (${au.identity_id}, ${userId}, true)
+          ON CONFLICT DO NOTHING
+        `;
+      } catch {
+        /* ignore */
+      }
+      return au.identity_id;
+    }
+  } catch {
+    /* ignore */
+  }
+
   const [identity] = await sql`
     INSERT INTO identities DEFAULT VALUES RETURNING id
   `;
@@ -165,26 +172,24 @@ export async function ensureIdentity(userId) {
     await sql`
       INSERT INTO identity_accounts (identity_id, user_id, is_primary)
       VALUES (${identityId}, ${userId}, true)
-      ON CONFLICT DO NOTHING
     `;
   } catch (e) {
-    // Some schemas may not have ON CONFLICT target — retry plain insert
-    try {
-      await sql`
-        INSERT INTO identity_accounts (identity_id, user_id, is_primary)
-        VALUES (${identityId}, ${userId}, true)
-      `;
-    } catch (e2) {
-      console.error('[ensureIdentity] identity_accounts insert failed:', e2?.message);
-      throw e2;
-    }
+    console.error('[ensureIdentity] identity_accounts insert failed:', e?.message);
+    throw e;
   }
 
-  // Best-effort: attach identity_id on public.user if that column/row exists
+  try {
+    await sql`
+      UPDATE auth_users SET identity_id = ${identityId}, updated_at = NOW() WHERE id = ${userId}
+    `;
+  } catch {
+    /* ignore */
+  }
+
   try {
     await sql`UPDATE "user" SET identity_id = ${identityId} WHERE id = ${userId}`;
   } catch {
-    // public.user may not exist or lack identity_id
+    /* ignore */
   }
 
   try {

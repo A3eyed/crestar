@@ -2,16 +2,18 @@
 import sql from '@/app/api/utils/sql';
 import { resolveUserId } from '@/app/api/utils/auth';
 import { ensureAppUser, ensureIdentity } from '@/app/api/utils/ensureAppUser';
+import { ensureCoreSchema } from '@/app/api/utils/ensureSchema';
 import { createPaystackSubaccount } from '@/app/api/utils/paystackSubaccount';
+import { jsonUserError, UserMessages, logServerError } from '@/app/api/utils/userFacingError';
 
-// Get business center for current user (ONE CENTER ONLY)
 export async function GET(request) {
   try {
     const userId = await resolveUserId(request);
     if (!userId) {
-      return Response.json({ error: 'Not authenticated' }, { status: 401 });
+      return Response.json({ error: UserMessages.unauthorized }, { status: 401 });
     }
 
+    await ensureCoreSchema();
     await ensureAppUser(userId);
 
     let identity_id = null;
@@ -37,28 +39,11 @@ export async function GET(request) {
 
     const centers = await sql`
       SELECT
-        id,
-        business_name,
-        center_type,
-        status,
-        verification_status,
-        full_name,
-        phone_number,
-        momo_number,
-        delivery_method,
-        vehicle_type,
-        is_available,
-        total_sales,
-        total_deliveries,
-        rating,
-        commission_rate,
-        payment_setup_complete,
-        default_currency,
-        country,
-        region,
-        city,
-        created_at,
-        updated_at
+        id, business_name, center_type, status, verification_status,
+        full_name, phone_number, momo_number, delivery_method, vehicle_type,
+        is_available, total_sales, total_deliveries, rating, commission_rate,
+        payment_setup_complete, default_currency, country, region, city,
+        created_at, updated_at
       FROM business_centers
       WHERE identity_id = ${identity_id}
       ORDER BY created_at ASC
@@ -66,27 +51,27 @@ export async function GET(request) {
     `;
 
     const hasCenter = centers.length > 0;
-
     return Response.json({
       has_center: hasCenter,
       center: hasCenter ? centers[0] : null,
       available_types: hasCenter ? [] : ['seller', 'foodhub', 'creator', 'deliverer'],
     });
   } catch (error) {
-    console.error('Business centers error:', error);
-    return Response.json(
-      { error: 'Internal server error', detail: String(error?.message || error) },
-      { status: 500 },
-    );
+    return jsonUserError('business-centers/GET', error);
   }
 }
 
-// Create a new business center (ONE-TIME)
 export async function POST(request) {
   try {
     const userId = await resolveUserId(request);
     if (!userId) {
-      return Response.json({ error: 'Not authenticated' }, { status: 401 });
+      return Response.json({ error: UserMessages.unauthorized }, { status: 401 });
+    }
+
+    // Critical: create tables if Neon is missing Crestar schema
+    const schema = await ensureCoreSchema();
+    if (!schema.ok) {
+      logServerError('business-centers/schema', schema.failed);
     }
 
     await ensureAppUser(userId);
@@ -110,40 +95,30 @@ export async function POST(request) {
 
     if (!centerType || !fullName || !country || !region || !city) {
       return Response.json(
-        {
-          error: 'Center type, full name, and location are required',
-          missing_fields: {
-            centerType: !centerType,
-            fullName: !fullName,
-            country: !country,
-            region: !region,
-            city: !city,
-          },
-        },
+        { error: 'Please fill in your name and location to continue.' },
         { status: 400 },
       );
     }
 
     const validTypes = ['seller', 'foodhub', 'deliverer', 'creator'];
     if (!validTypes.includes(centerType)) {
-      return Response.json({ error: 'Invalid center type' }, { status: 400 });
+      return Response.json({ error: 'Please choose a valid account type.' }, { status: 400 });
     }
 
     if (centerType === 'deliverer' && (!phoneNumber || !vehicleType)) {
       return Response.json(
-        { error: 'Phone number and vehicle type are required for deliverers' },
+        { error: 'Phone number and vehicle type are required for deliverers.' },
         { status: 400 },
       );
     }
 
     if ((centerType === 'seller' || centerType === 'foodhub') && !phoneNumber) {
       return Response.json(
-        { error: 'Phone number (Mobile Money) is required for sellers and FoodHub owners' },
+        { error: 'A Mobile Money number is required so you can receive payouts.' },
         { status: 400 },
       );
     }
 
-    // Identity without depending on public."user"
     const identity_id = await ensureIdentity(userId);
 
     const existingCenter = await sql`
@@ -159,7 +134,7 @@ export async function POST(request) {
       };
       return Response.json(
         {
-          error: 'You already have a business center. Each user can only have one center.',
+          error: 'You already have a business account on Crestar.',
           existing_center_type: existingCenter[0].center_type,
           dashboard_route: existingRoutes[existingCenter[0].center_type] || '/',
         },
@@ -173,19 +148,15 @@ export async function POST(request) {
         type: 'id_verification',
         id_type: idType || null,
         url: idPhotoFront,
-        country: country,
+        country,
       });
     }
-    if (idPhotoBack) {
-      portfolioMedia.push({ type: 'id_verification_back', url: idPhotoBack });
-    }
-    if (businessPermitPhoto) {
+    if (idPhotoBack) portfolioMedia.push({ type: 'id_verification_back', url: idPhotoBack });
+    if (businessPermitPhoto)
       portfolioMedia.push({ type: 'business_permit', url: businessPermitPhoto });
-    }
-    if (vehiclePhoto) {
-      portfolioMedia.push({ type: 'vehicle_photo', url: vehiclePhoto });
-    }
+    if (vehiclePhoto) portfolioMedia.push({ type: 'vehicle_photo', url: vehiclePhoto });
 
+    // Paystack is non-blocking — subaccount may already exist from a prior attempt
     let paystackSubaccountCode = null;
     if (phoneNumber) {
       try {
@@ -197,13 +168,10 @@ export async function POST(request) {
         if (subaccountResult?.subaccountCode) {
           paystackSubaccountCode = subaccountResult.subaccountCode;
         } else {
-          console.error(
-            `⚠️ Paystack subaccount creation failed during onboarding (user ${userId}):`,
-            subaccountResult?.error,
-          );
+          logServerError('paystack-subaccount', subaccountResult?.error);
         }
       } catch (e) {
-        console.error('Paystack error (non-blocking):', e?.message);
+        logServerError('paystack-subaccount', e);
       }
     }
 
@@ -250,20 +218,12 @@ export async function POST(request) {
         ) RETURNING id, center_type, business_name, full_name, paystack_subaccount_code
       `;
 
-      // Optional welcome message — never block onboarding
       try {
         const crestarAccount = await sql`
-          SELECT id FROM auth_users
-          WHERE LOWER(username) = 'crestar'
-          LIMIT 1
+          SELECT id FROM auth_users WHERE LOWER(username) = 'crestar' LIMIT 1
         `;
         if (crestarAccount.length > 0) {
-          const welcomeMessage =
-            centerType === 'seller' || centerType === 'foodhub'
-              ? `Welcome to Crestar, ${fullName}! Your seller account is live. Crestar charges a flat 3% fee on sales.`
-              : centerType === 'creator'
-                ? `Welcome to Crestar Creator Program, ${fullName}!`
-                : `Welcome to Crestar, ${fullName}! Your Deliverer account is active.`;
+          const welcomeMessage = `Welcome to Crestar, ${fullName}! Your account is live.`;
           await sql`
             INSERT INTO messages (sender_id, receiver_id, content, is_read)
             VALUES (
@@ -275,7 +235,7 @@ export async function POST(request) {
           `;
         }
       } catch (messageError) {
-        console.error('Failed to send welcome message:', messageError);
+        logServerError('welcome-message', messageError);
       }
 
       const dashboardRoutes = {
@@ -291,27 +251,16 @@ export async function POST(request) {
         dashboard_route: dashboardRoutes[centerType],
         has_paystack: !!paystackSubaccountCode,
         payment_setup_required: !paystackSubaccountCode,
-        message: `${centerType.charAt(0).toUpperCase() + centerType.slice(1)} center created successfully.`,
+        message: 'You\'re all set — your seller account is ready.',
       });
     } catch (dbError) {
-      console.error('Business center insert failed:', dbError);
-      return Response.json(
-        {
-          error: 'Failed to create business center in database',
-          detail: String(dbError?.message || dbError),
-          hint: 'Tables may be missing — run Crestar migrations on Neon.',
-        },
-        { status: 500 },
-      );
+      return jsonUserError('business-centers/INSERT', dbError, {
+        userMessage: UserMessages.onboarding,
+      });
     }
   } catch (error) {
-    console.error('Business center creation error:', error);
-    return Response.json(
-      {
-        error: 'Failed to create business center',
-        detail: String(error?.message || error),
-      },
-      { status: 500 },
-    );
+    return jsonUserError('business-centers/POST', error, {
+      userMessage: UserMessages.onboarding,
+    });
   }
 }
