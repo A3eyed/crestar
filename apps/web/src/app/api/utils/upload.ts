@@ -1,17 +1,18 @@
 // @ts-nocheck
 /**
  * Server uploads go to Cloudflare R2.
- * Anything / create.xyz upload hosts are not used.
  */
 import { uploadBuffer } from './r2';
 
 function extensionFor(contentType = '') {
-  if (contentType.includes('png')) return 'png';
-  if (contentType.includes('webp')) return 'webp';
-  if (contentType.includes('gif')) return 'gif';
-  if (contentType.includes('mp4')) return 'mp4';
-  if (contentType.includes('quicktime')) return 'mov';
-  if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'jpg';
+  const t = String(contentType).toLowerCase();
+  if (t.includes('png')) return 'png';
+  if (t.includes('webp')) return 'webp';
+  if (t.includes('gif')) return 'gif';
+  if (t.includes('mp4')) return 'mp4';
+  if (t.includes('webm')) return 'webm';
+  if (t.includes('quicktime')) return 'mov';
+  if (t.includes('jpeg') || t.includes('jpg')) return 'jpg';
   return 'bin';
 }
 
@@ -39,7 +40,7 @@ async function upload({ url, buffer, base64, contentType, folder }) {
     contentType: type,
     extension: extensionFor(type),
   });
-  return { url: result.url, key: result.key };
+  return { url: result.url, key: result.key, mimeType: type };
 }
 
 export { upload };
