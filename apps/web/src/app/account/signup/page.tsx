@@ -7,15 +7,17 @@ import {
   isMobileWebViewContext,
   waitForSession,
   EXPO_SUCCESS_PATH,
+  SIGNUP_VERIFY_EMAIL_MESSAGE,
 } from '@/utils/authErrors';
 
-function getSafeCallbackUrl(value) {
+function getSafeCallbackUrl(value: string | null) {
   const callbackUrl = value || '/';
   return callbackUrl.startsWith('/') ? callbackUrl : '/';
 }
 
 export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
@@ -30,7 +32,6 @@ export default function SignUpPage() {
 
   useEffect(() => {
     try {
-      // Detect if we're in a mobile WebView (callbackUrl is the reliable signal)
       const inWebView = isMobileWebViewContext();
       setIsWebView(inWebView);
 
@@ -91,6 +92,7 @@ export default function SignUpPage() {
       }
 
       setError(null);
+      setInfo(null);
       setLoading(true);
 
       try {
@@ -101,23 +103,25 @@ export default function SignUpPage() {
         });
 
         if (result?.error) {
-          console.error('[SignUp] Better Auth error:', result.error);
+          console.error('[SignUp] Auth error:', result.error);
           setError(getFriendlyAuthError(result.error, 'signup'));
           setLoading(false);
           return;
         }
 
-        // Confirm the session cookie is readable before navigating away so the
-        // WebView bridge never reads an empty cookie jar.
+        // Neon may create the user without a session when email verification is required
+        // (response token is null; get-session stays empty; sign-in returns EMAIL_NOT_VERIFIED).
         const session = await waitForSession();
         if (!session) {
-          setError("Your account was created but we couldn't sign you in. Please sign in.");
+          setInfo(SIGNUP_VERIFY_EMAIL_MESSAGE);
           setLoading(false);
+          // Soft redirect to sign-in after a short beat so the user can read the message
+          window.setTimeout(() => {
+            window.location.href = `/account/signin${searchString}`;
+          }, 2800);
           return;
         }
 
-        // Re-check the native bridge at submit time — it is injected at
-        // document-end and may not have existed when the page mounted.
         const inWebView = isWebView || isMobileWebViewContext();
         const destination = inWebView
           ? EXPO_SUCCESS_PATH
@@ -130,10 +134,9 @@ export default function SignUpPage() {
         setLoading(false);
       }
     },
-    [email, password, agreed, signUpWithCredentials, callbackUrl, isWebView]
+    [email, password, agreed, signUpWithCredentials, callbackUrl, isWebView, searchString]
   );
 
-  // Show black while loading — prevents white flash in dark mobile WebView
   if (!ready) {
     return <div style={{ minHeight: '100vh', backgroundColor: '#000000' }} />;
   }
@@ -151,6 +154,9 @@ export default function SignUpPage() {
         errorBg: 'rgba(255,90,90,0.12)',
         errorBorder: 'rgba(255,90,90,0.25)',
         errorText: '#FF5A5A',
+        infoBg: 'rgba(212,175,55,0.12)',
+        infoBorder: 'rgba(212,175,55,0.35)',
+        infoText: '#D4AF37',
       }
     : {
         bg: '#FFFFFF',
@@ -164,11 +170,14 @@ export default function SignUpPage() {
         errorBg: '#FFF0F2',
         errorBorder: 'rgba(220,38,38,0.25)',
         errorText: '#DC2626',
+        infoBg: '#FFF8E6',
+        infoBorder: 'rgba(212,175,55,0.45)',
+        infoText: '#8A6D1B',
       };
 
   const inputStyle = {
     width: '100%',
-    boxSizing: 'border-box',
+    boxSizing: 'border-box' as const,
     fontSize: 16,
     padding: '14px 16px',
     borderRadius: 12,
@@ -257,20 +266,37 @@ export default function SignUpPage() {
                 border: `1px solid ${c.errorBorder}`,
               }}
             >
-              <p
-                style={{
-                  color: c.errorText,
-                  fontSize: 13,
-                  textAlign: 'center',
-                  margin: 0,
-                }}
-              >
+              <p style={{ color: c.errorText, fontSize: 13, textAlign: 'center', margin: 0 }}>
                 {error}
               </p>
             </div>
           )}
 
-          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', color: c.subtle, fontSize: 13, lineHeight: 1.4 }}>
+          {info && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: 10,
+                backgroundColor: c.infoBg,
+                border: `1px solid ${c.infoBorder}`,
+              }}
+            >
+              <p style={{ color: c.infoText, fontSize: 13, textAlign: 'center', margin: 0 }}>
+                {info}
+              </p>
+            </div>
+          )}
+
+          <label
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'flex-start',
+              color: c.subtle,
+              fontSize: 13,
+              lineHeight: 1.4,
+            }}
+          >
             <input
               type="checkbox"
               checked={agreed}
@@ -282,9 +308,13 @@ export default function SignUpPage() {
             />
             <span>
               I agree to the{' '}
-              <a href="/terms" style={{ color: c.text, fontWeight: 700 }}>Terms of Service</a>
-              {' '}and{' '}
-              <a href="/privacy" style={{ color: c.text, fontWeight: 700 }}>Privacy Policy</a>
+              <a href="/terms" style={{ color: c.text, fontWeight: 700 }}>
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a href="/privacy" style={{ color: c.text, fontWeight: 700 }}>
+                Privacy Policy
+              </a>
               , including the rules on your content, copyright, payments, and prohibited items.
             </span>
           </label>
