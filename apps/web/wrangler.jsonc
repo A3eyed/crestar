@@ -2,9 +2,11 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "crestar",
   "main": ".open-next/worker.js",
-  "compatibility_date": "2025-03-01",
+  // After 2025-04-01, nodejs_compat populates process.env from Worker secrets/vars
+  "compatibility_date": "2025-04-01",
   "compatibility_flags": [
     "nodejs_compat",
+    "nodejs_compat_populate_process_env",
     "global_fetch_strictly_public"
   ],
   "assets": {
@@ -20,4 +22,6 @@
   "observability": {
     "enabled": true
   }
+  // Secrets (NEON_AUTH_*, DATABASE_URL, etc.) must be set in the dashboard or
+  // via `wrangler secret put`. Do not put secret values in this file.
 }

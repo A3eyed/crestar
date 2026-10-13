@@ -1,14 +1,15 @@
 /**
  * Lightweight health check — does not expose secret values.
+ * 503 means required runtime config is missing (same root as auth 500s).
  */
-export async function GET() {
-  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
-  const neonAuthBase = Boolean(process.env.NEON_AUTH_BASE_URL?.trim());
-  const cookieSecret = process.env.NEON_AUTH_COOKIE_SECRET?.trim() || '';
-  const hasCookieSecret = cookieSecret.length >= 32;
+import { getAuthEnvPresence } from '@/lib/auth-env';
 
-  // Auth works with Neon Managed Better Auth; DATABASE_URL still needed for app data.
-  const ok = hasDatabaseUrl && neonAuthBase && hasCookieSecret;
+export async function GET() {
+  const presence = await getAuthEnvPresence();
+  const ok =
+    presence.DATABASE_URL &&
+    presence.NEON_AUTH_BASE_URL &&
+    presence.NEON_AUTH_COOKIE_SECRET;
 
   return Response.json(
     {
@@ -16,10 +17,12 @@ export async function GET() {
       service: 'crestar-web',
       auth: 'neon-managed-better-auth',
       checks: {
-        DATABASE_URL: hasDatabaseUrl,
-        NEON_AUTH_BASE_URL: neonAuthBase,
-        NEON_AUTH_COOKIE_SECRET: hasCookieSecret,
+        DATABASE_URL: presence.DATABASE_URL,
+        NEON_AUTH_BASE_URL: presence.NEON_AUTH_BASE_URL,
+        NEON_AUTH_COOKIE_SECRET: presence.NEON_AUTH_COOKIE_SECRET,
       },
+      // Names only — which resolver saw each key
+      sources: presence.sources,
     },
     { status: ok ? 200 : 503 },
   );

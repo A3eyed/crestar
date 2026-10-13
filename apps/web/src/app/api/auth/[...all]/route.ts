@@ -2,26 +2,21 @@
  * Neon Managed Better Auth catch-all.
  * Proxies all /api/auth/* traffic to the Neon Auth base URL.
  */
-import { getAuth } from '@/lib/auth';
-
-let handlers: ReturnType<ReturnType<typeof getAuth>['handler']> | null = null;
-
-function getHandlers() {
-  if (!handlers) {
-    handlers = getAuth().handler();
-  }
-  return handlers;
-}
+import { getAuthAsync } from '@/lib/auth';
+import { safeErrorInfo } from '@/lib/auth-env';
 
 function missingEnvMessage(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes('NEON_AUTH_BASE_URL')) {
-    return 'NEON_AUTH_BASE_URL is not set on the Cloudflare Worker. Enable Better Auth in Neon Console and set the Auth URL as a Worker secret/var.';
+  const { message } = safeErrorInfo(err);
+  if (message.includes('NEON_AUTH_BASE_URL')) {
+    return 'NEON_AUTH_BASE_URL is not set on the Cloudflare Worker (Production). Add it under Workers → crestar → Settings → Variables and Secrets.';
   }
-  if (msg.includes('NEON_AUTH_COOKIE_SECRET')) {
-    return 'NEON_AUTH_COOKIE_SECRET is missing or too short (32+ chars) on the Cloudflare Worker.';
+  if (message.includes('NEON_AUTH_COOKIE_SECRET')) {
+    return 'NEON_AUTH_COOKIE_SECRET is missing or too short (32+ chars) on the Cloudflare Worker (Production).';
   }
-  return msg || 'Auth failed to initialize';
+  if (message.includes('Auth not initialized')) {
+    return message;
+  }
+  return message || 'Auth failed to initialize';
 }
 
 async function safeHandle(
@@ -29,17 +24,26 @@ async function safeHandle(
   request: Request,
 ): Promise<Response> {
   try {
-    const h = getHandlers() as {
+    const authInstance = await getAuthAsync();
+    const handlers = authInstance.handler() as {
       GET: (req: Request) => Promise<Response>;
       POST: (req: Request) => Promise<Response>;
     };
-    return await h[method](request);
+    return await handlers[method](request);
   } catch (err) {
-    console.error('[auth] Neon Auth handler failed:', err);
+    const info = safeErrorInfo(err);
+    // Safe diagnostics only — no secrets, cookies, bodies
+    console.error(
+      '[auth] Neon Auth handler failed:',
+      info.name,
+      info.message,
+      info.causeMessage ? `cause=${info.causeMessage}` : '',
+    );
     return Response.json(
       {
         error: 'AUTH_INIT_FAILED',
         message: missingEnvMessage(err),
+        name: info.name,
         status: 500,
       },
       { status: 500 },
