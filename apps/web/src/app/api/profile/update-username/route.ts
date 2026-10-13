@@ -2,11 +2,6 @@
 import sql from '@/app/api/utils/sql';
 import { resolveUserId } from '@/app/api/utils/auth';
 
-/**
- * Ensure the user has a profile row in auth_users.
- * Users created via better-auth only get a row in the "user" table,
- * so we auto-provision their auth_users profile row on first access.
- */
 async function ensureProfileRow(userId) {
   await sql`
     INSERT INTO auth_users (id, email, name, username, display_name, profile_image)
@@ -25,26 +20,24 @@ async function ensureProfileRow(userId) {
 
 /**
  * POST /api/profile/update-username
- *
- * Allows users to manually change their username from the default email-based username.
- * By default, usernames are auto-generated from email prefix during signup.
- * This endpoint tracks username changes and enforces a 30-day cooldown between changes.
+ * TikTok-style: 2–24 chars, letters/numbers/._ , once every 30 days.
  */
 export async function POST(request) {
   try {
-    const { username } = await request.json();
+    const body = await request.json();
+    let username = String(body?.username || '')
+      .trim()
+      .replace(/^@+/, '')
+      .toLowerCase();
 
-    // Get authenticated user (supports both web and mobile)
     const userId = await resolveUserId(request);
     if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Auto-provision profile row for better-auth users
     await ensureProfileRow(userId);
 
-    // Validate username format (TikTok-style: alphanumeric, underscore, dot, 2-24 chars)
-    const usernameRegex = /^[a-zA-Z0-9_.]{2,24}$/;
+    const usernameRegex = /^[a-z0-9_.]{2,24}$/;
     if (!usernameRegex.test(username)) {
       return Response.json(
         {
@@ -55,10 +48,29 @@ export async function POST(request) {
       );
     }
 
-    // Check if username is already taken
+    const reserved = new Set([
+      'admin',
+      'crestar',
+      'support',
+      'help',
+      'api',
+      'www',
+      'account',
+      'settings',
+      'profile',
+      'edit-profile',
+      'seller',
+      'live',
+      'cart',
+      'checkout',
+    ]);
+    if (reserved.has(username)) {
+      return Response.json({ error: 'That username is not available' }, { status: 400 });
+    }
+
     const [existing] = await sql`
-      SELECT id FROM auth_users 
-      WHERE LOWER(username) = LOWER(${username}) 
+      SELECT id FROM auth_users
+      WHERE LOWER(username) = ${username}
       AND id != ${userId}
     `;
 
@@ -66,16 +78,24 @@ export async function POST(request) {
       return Response.json({ error: 'Username already taken' }, { status: 400 });
     }
 
-    // Check username change cooldown (90 days as requested)
     const [currentUser] = await sql`
-      SELECT username_last_changed, username_change_count 
-      FROM auth_users 
+      SELECT username, username_last_changed, username_change_count
+      FROM auth_users
       WHERE id = ${userId}
     `;
 
+    if (currentUser?.username && currentUser.username.toLowerCase() === username) {
+      return Response.json({
+        success: true,
+        user: currentUser,
+        message: 'Username unchanged',
+      });
+    }
+
     if (currentUser?.username_last_changed) {
       const daysSinceLastChange = Math.floor(
-        (Date.now() - new Date(currentUser.username_last_changed).getTime()) / (1000 * 60 * 60 * 24)
+        (Date.now() - new Date(currentUser.username_last_changed).getTime()) /
+          (1000 * 60 * 60 * 24)
       );
 
       if (daysSinceLastChange < 30) {
@@ -88,25 +108,29 @@ export async function POST(request) {
       }
     }
 
-    // Update username
     const [updatedUser] = await sql`
-      UPDATE auth_users 
-      SET 
+      UPDATE auth_users
+      SET
         username = ${username},
         username_last_changed = NOW(),
-        username_change_count = COALESCE(username_change_count, 0) + 1
+        username_change_count = COALESCE(username_change_count, 0) + 1,
+        updated_at = NOW()
       WHERE id = ${userId}
-      RETURNING id, username, email, display_name, bio, profile_image
+      RETURNING id, username, email, display_name, bio, profile_image, name
     `;
 
-    // Keep the better-auth "user" table in sync so every surface shows the new username
     await sql`
-      UPDATE "user" SET username = ${username} WHERE id = ${userId}
+      UPDATE "user"
+      SET username = ${username}, "updatedAt" = NOW()
+      WHERE id = ${userId}
     `;
 
     return Response.json({ success: true, user: updatedUser });
   } catch (error) {
     console.error('Update username error:', error);
+    if (String(error?.message || '').includes('unique') || error?.code === '23505') {
+      return Response.json({ error: 'Username already taken' }, { status: 400 });
+    }
     return Response.json({ error: 'Failed to update username' }, { status: 500 });
   }
 }
