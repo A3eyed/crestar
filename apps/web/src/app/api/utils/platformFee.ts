@@ -4,7 +4,7 @@
  * CRESTAR PLATFORM FEE — ONE flat rate, everywhere.
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * Crestar charges a single, flat 3% platform fee. It is the ONLY fee Crestar
+ * Crestar charges a single, flat 5% platform fee. It is the ONLY fee Crestar
  * takes, and it is identical across every program in the Monetization Center:
  *
  *   • Sellers (physical goods)
@@ -13,21 +13,21 @@
  *   • Deliverers (delivery fees)
  *
  * There are no tiered rates, no per-category rates, no "creator sale" rate and
- * no registered-business discount. If you find another fee anywhere, it is a
- * bug — delete it and use this module instead.
+ * no registered-business discount. There are no subscriptions. If you find
+ * another fee anywhere, it is a bug — delete it and use this module instead.
  *
  * The database is the final authority: `orders.platform_fee_rate` defaults to
- * 0.0300 and the `crestar_apply_platform_fee` BEFORE INSERT/UPDATE trigger nets
+ * 0.0500 and the `crestar_apply_platform_fee` BEFORE INSERT/UPDATE trigger nets
  * every payout leg exactly once. The helpers here mirror that maths precisely
  * so the API, the web UI and the mobile app all quote the same numbers the
  * ledger will actually record.
  */
 
 /** The flat platform fee, as a decimal fraction. */
-export const PLATFORM_FEE_RATE = 0.03;
+export const PLATFORM_FEE_RATE = 0.05;
 
 /** The flat platform fee, as a whole percentage. */
-export const PLATFORM_FEE_PERCENT = 3;
+export const PLATFORM_FEE_PERCENT = 5;
 
 /** Share of a transaction the earner keeps, as a whole percentage. */
 export const EARNER_PERCENT = 100 - PLATFORM_FEE_PERCENT;
@@ -42,13 +42,13 @@ export function money(value) {
   return Math.round(amount * 100) / 100;
 }
 
-/** The 3% Crestar keeps out of a gross amount. */
+/** The 5% Crestar keeps out of a gross amount. */
 export function platformFeeOn(grossAmount) {
   const gross = Math.max(0, money(grossAmount));
   return money(gross * PLATFORM_FEE_RATE);
 }
 
-/** What the earner actually receives out of a gross amount (gross − 3%). */
+/** What the earner actually receives out of a gross amount (gross − 5%). */
 export function netOfPlatformFee(grossAmount) {
   const gross = Math.max(0, money(grossAmount));
   return money(gross - platformFeeOn(gross));
@@ -59,7 +59,7 @@ export function netOfPlatformFee(grossAmount) {
  *
  * `goodsTotal` is the order subtotal (delivery excluded). The creator's
  * commission comes out of the goods total first, then BOTH the creator's and
- * the seller's shares are netted by 3%. The deliverer's fee is netted by 3%
+ * the seller's shares are netted by 5%. The deliverer's fee is netted by 5%
  * separately, because it is usually attached after the order is created.
  *
  * @returns { platformFee, sellerPayout, creatorCommission, delivererFee }
