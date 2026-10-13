@@ -19,7 +19,8 @@ import {
 } from 'lucide-react';
 
 const MAX_RECORDING_SECONDS = 60;
-const COMPRESS_BITRATE = 2_500_000;
+// Lower bitrate + resolution = much faster uploads without looking bad on phone
+const COMPRESS_BITRATE = 1_200_000;
 
 function productImage(p) {
   let media = p.media;
@@ -87,8 +88,8 @@ export default function CreatePage() {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: mode || facingMode,
-            width: { ideal: 720 },
-            height: { ideal: 1280 },
+            width: { ideal: 540 },
+            height: { ideal: 960 },
           },
           audio: true,
         });
@@ -264,7 +265,6 @@ export default function CreatePage() {
     setSearchQuery('');
   };
 
-  /** TikTok-style: queue in background and leave create immediately. */
   const handlePost = () => {
     if (!selectedFile || isPosting) return;
     if (taggedProducts.length === 0) {
@@ -278,7 +278,6 @@ export default function CreatePage() {
       caption,
       taggedProducts,
     });
-    // Soft navigate so the in-memory upload + XHR keep running
     router.replace('/');
   };
 
@@ -314,12 +313,12 @@ export default function CreatePage() {
             <button
               type="button"
               onClick={() => router.replace('/')}
-              className="w-11 h-11 bg-black/50 rounded-full flex items-center justify-center"
+              className="w-11 h-11 glass rounded-full flex items-center justify-center"
             >
               <X size={22} color="white" />
             </button>
             {isRecording && (
-              <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-full">
+              <div className="flex items-center gap-2 glass px-4 py-2 rounded-full">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-white font-semibold text-sm">
                   {formatTime(recordingTime)} / {formatTime(MAX_RECORDING_SECONDS)}
@@ -330,7 +329,7 @@ export default function CreatePage() {
               type="button"
               onClick={flipCamera}
               disabled={isRecording}
-              className="w-11 h-11 bg-black/50 rounded-full flex items-center justify-center disabled:opacity-40"
+              className="w-11 h-11 glass rounded-full flex items-center justify-center disabled:opacity-40"
             >
               <SwitchCamera size={22} color="white" />
             </button>
@@ -358,7 +357,7 @@ export default function CreatePage() {
                 disabled={isRecording}
                 className="flex flex-col items-center gap-1.5 disabled:opacity-40"
               >
-                <span className="w-12 h-12 rounded-xl bg-white/15 border border-white/30 flex items-center justify-center">
+                <span className="w-12 h-12 rounded-xl glass flex items-center justify-center">
                   <Upload size={22} color="white" />
                 </span>
                 <span className="text-white text-xs font-semibold">Upload</span>
@@ -386,7 +385,7 @@ export default function CreatePage() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="sticky top-0 z-50 bg-black border-b border-white/10">
+      <div className="sticky top-0 z-50 glass-strong">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
             type="button"
@@ -442,7 +441,7 @@ export default function CreatePage() {
             onChange={(e) => setCaption(e.target.value)}
             placeholder="Add a caption…"
             rows={3}
-            className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-white/40 outline-none focus:border-[#D4AF37] resize-none"
+            className="w-full glass rounded-xl px-4 py-3 text-white placeholder-white/40 outline-none focus:border-[#D4AF37] resize-none"
           />
 
           <div>
@@ -471,7 +470,7 @@ export default function CreatePage() {
                 {taggedProducts.map((product) => (
                   <div
                     key={product.id}
-                    className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10"
+                    className="flex items-center gap-3 p-3 glass rounded-xl"
                   >
                     {productImage(product) ? (
                       <img
@@ -511,7 +510,7 @@ export default function CreatePage() {
 
       {showProductSearch && (
         <div className="fixed inset-0 z-50 bg-black">
-          <div className="sticky top-0 z-50 bg-black border-b border-white/10">
+          <div className="sticky top-0 z-50 glass-strong">
             <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
               <button type="button" onClick={() => setShowProductSearch(false)} className="text-white">
                 <X size={24} />
@@ -524,7 +523,7 @@ export default function CreatePage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search your products…"
                   autoFocus
-                  className="w-full bg-white/10 text-white text-base pl-10 pr-4 py-2 rounded-lg outline-none placeholder:text-white/40"
+                  className="w-full glass text-white text-base pl-10 pr-4 py-2 rounded-lg outline-none placeholder:text-white/40"
                 />
               </div>
             </div>
@@ -559,7 +558,7 @@ export default function CreatePage() {
                     key={product.id}
                     type="button"
                     onClick={() => handleAddProduct(product)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 text-left hover:bg-white/10"
+                    className="w-full flex items-center gap-3 p-3 rounded-xl glass text-left"
                   >
                     {productImage(product) ? (
                       <img
