@@ -1,6 +1,7 @@
 // @ts-nocheck
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import useUser from '@/utils/useUser';
 import { enqueueVideoPost } from '@/utils/postVideoQueue';
 import CurrencyPrice from '@/components/CurrencyPrice';
@@ -37,6 +38,7 @@ function productImage(p) {
 }
 
 export default function CreatePage() {
+  const router = useRouter();
   const { data: user, loading: userLoading } = useUser();
 
   const [selectedFile, setSelectedFile] = useState(null);
@@ -276,7 +278,8 @@ export default function CreatePage() {
       caption,
       taggedProducts,
     });
-    window.location.href = '/';
+    // Soft navigate so the in-memory upload + XHR keep running
+    router.replace('/');
   };
 
   if (userLoading) {
@@ -310,7 +313,7 @@ export default function CreatePage() {
           <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4">
             <button
               type="button"
-              onClick={() => (window.location.href = '/')}
+              onClick={() => router.replace('/')}
               className="w-11 h-11 bg-black/50 rounded-full flex items-center justify-center"
             >
               <X size={22} color="white" />
