@@ -7,11 +7,9 @@ import CurrencyPrice from '@/components/CurrencyPrice';
 import {
   X,
   Upload,
-  Video,
   Camera,
   Play,
   Pause,
-  RotateCcw,
   ShoppingBag,
   Plus,
   Search,
@@ -20,10 +18,122 @@ import {
 } from 'lucide-react';
 
 const MAX_RECORDING_SECONDS = 60;
+const COMPRESS_MAX_WIDTH = 720;
+const COMPRESS_BITRATE = 2_500_000;
+
+/** Re-encode large videos client-side so uploads stay small and fast. */
+async function compressVideo(file) {
+  if (!file || !file.type?.startsWith('video/')) return file;
+  // Skip tiny clips
+  if (file.size < 8 * 1024 * 1024) return file;
+  if (typeof document === 'undefined' || typeof MediaRecorder === 'undefined') return file;
+
+  try {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.src = url;
+    await new Promise((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject(new Error('Could not read video'));
+    });
+
+    const scale = Math.min(1, COMPRESS_MAX_WIDTH / (video.videoWidth || COMPRESS_MAX_WIDTH));
+    const w = Math.max(2, Math.round((video.videoWidth || COMPRESS_MAX_WIDTH) * scale / 2) * 2);
+    const h = Math.max(2, Math.round((video.videoHeight || 1280) * scale / 2) * 2);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || typeof canvas.captureStream !== 'function') {
+      URL.revokeObjectURL(url);
+      return file;
+    }
+
+    const stream = canvas.captureStream(30);
+    // Best-effort audio from original when browser supports it
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioCtx.createMediaElementSource(video);
+      const dest = audioCtx.createMediaStreamDestination();
+      source.connect(dest);
+      dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+    } catch {
+      // video-only is fine
+    }
+
+    let mimeType = '';
+    for (const c of ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']) {
+      if (MediaRecorder.isTypeSupported(c)) {
+        mimeType = c;
+        break;
+      }
+    }
+
+    const chunks = [];
+    const recorder = new MediaRecorder(stream, {
+      mimeType: mimeType || undefined,
+      videoBitsPerSecond: COMPRESS_BITRATE,
+    });
+    recorder.ondataavailable = (e) => {
+      if (e.data?.size) chunks.push(e.data);
+    };
+
+    const done = new Promise((resolve) => {
+      recorder.onstop = () => resolve();
+    });
+
+    recorder.start(200);
+    await video.play();
+
+    const draw = () => {
+      if (video.paused || video.ended) return;
+      ctx.drawImage(video, 0, 0, w, h);
+      requestAnimationFrame(draw);
+    };
+    draw();
+
+    await new Promise((resolve) => {
+      video.onended = () => resolve();
+    });
+    if (recorder.state !== 'inactive') recorder.stop();
+    await done;
+
+    URL.revokeObjectURL(url);
+    stream.getTracks().forEach((t) => t.stop());
+
+    const type = mimeType || 'video/webm';
+    const blob = new Blob(chunks, { type });
+    if (!blob.size || blob.size >= file.size * 0.95) return file;
+    const ext = type.includes('mp4') ? 'mp4' : 'webm';
+    return new File([blob], `crestar_${Date.now()}.${ext}`, { type });
+  } catch (e) {
+    console.warn('Video compress skipped:', e?.message || e);
+    return file;
+  }
+}
+
+function productImage(p) {
+  let media = p.media;
+  if (typeof media === 'string') {
+    try {
+      media = JSON.parse(media);
+    } catch {
+      media = [media];
+    }
+  }
+  if (Array.isArray(media) && media.length) {
+    const first = media[0];
+    return typeof first === 'string' ? first : first?.url || null;
+  }
+  return null;
+}
 
 export default function CreatePage() {
   const { data: user, loading: userLoading } = useUser();
-  const [upload, { loading: uploading }] = useUpload();
+  const [upload] = useUpload();
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
@@ -31,13 +141,12 @@ export default function CreatePage() {
   const [taggedProducts, setTaggedProducts] = useState([]);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
+  const [myProducts, setMyProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [postStatus, setPostStatus] = useState('');
 
-  // ── Camera recording state ──
-  const [showCamera, setShowCamera] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -50,7 +159,7 @@ export default function CreatePage() {
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
-  const hasAutoOpenedCameraRef = useRef(false);
+  const startedCameraRef = useRef(false);
 
   useEffect(() => {
     if (!userLoading && !user) {
@@ -58,7 +167,6 @@ export default function CreatePage() {
     }
   }, [user, userLoading]);
 
-  // ── Camera helpers ──
   const stopStream = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -74,8 +182,8 @@ export default function CreatePage() {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: mode || facingMode,
-            width: { ideal: 1080 },
-            height: { ideal: 1920 },
+            width: { ideal: 720 },
+            height: { ideal: 1280 },
           },
           audio: true,
         });
@@ -87,35 +195,27 @@ export default function CreatePage() {
       } catch (err) {
         console.error('Camera error:', err);
         setCameraError(
-          'Could not access your camera. Please allow camera and microphone permissions, or upload a video instead.'
+          'Camera unavailable. Allow camera and mic, or use Upload.',
         );
       }
     },
-    [facingMode, stopStream]
+    [facingMode, stopStream],
   );
 
-  const openCamera = async () => {
-    setShowCamera(true);
-    // Start after the modal mounts so the video element exists
-    setTimeout(() => startCamera(), 50);
-  };
-
-  // ── Camera-first flow (matches the mobile app): open the camera
-  // immediately when the page loads, with record + upload options ──
+  // Camera-only entry: no marketing screen
   useEffect(() => {
-    if (userLoading || !user) return;
-    if (videoPreview || hasAutoOpenedCameraRef.current) return;
-    hasAutoOpenedCameraRef.current = true;
-    openCamera();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userLoading, videoPreview]);
+    if (userLoading || !user || videoPreview || startedCameraRef.current) return;
+    startedCameraRef.current = true;
+    const t = setTimeout(() => startCamera(), 40);
+    return () => clearTimeout(t);
+  }, [user, userLoading, videoPreview, startCamera]);
 
-  const closeCamera = () => {
-    if (isRecording) stopRecording(true);
-    stopStream();
-    setShowCamera(false);
-    setRecordingTime(0);
-  };
+  useEffect(() => {
+    return () => {
+      stopStream();
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [stopStream]);
 
   const flipCamera = async () => {
     if (isRecording) return;
@@ -142,47 +242,41 @@ export default function CreatePage() {
   const startRecording = () => {
     if (!streamRef.current) return;
     chunksRef.current = [];
-
-    // Pick a supported mime type (Safari uses mp4, Chrome/Firefox webm)
     let mimeType = '';
-    const candidates = [
+    for (const c of [
       'video/mp4',
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
       'video/webm',
-    ];
-    for (const c of candidates) {
+    ]) {
       if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) {
         mimeType = c;
         break;
       }
     }
-
     try {
-      const recorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined);
+      const recorder = new MediaRecorder(streamRef.current, {
+        mimeType: mimeType || undefined,
+        videoBitsPerSecond: COMPRESS_BITRATE,
+      });
       mediaRecorderRef.current = recorder;
-
       recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data?.size) chunksRef.current.push(e.data);
       };
-
       recorder.onstop = () => {
         const type = mimeType || 'video/webm';
         const ext = type.includes('mp4') ? 'mp4' : 'webm';
         const blob = new Blob(chunksRef.current, { type });
-        if (blob.size === 0) return;
-        const file = new File([blob], `recording_${blob.size}.${ext}`, { type });
+        if (!blob.size) return;
+        const file = new File([blob], `recording_${Date.now()}.${ext}`, { type });
         setSelectedFile(file);
         setVideoPreview(URL.createObjectURL(blob));
         stopStream();
-        setShowCamera(false);
         setRecordingTime(0);
       };
-
-      recorder.start(250);
+      recorder.start(200);
       setIsRecording(true);
       setRecordingTime(0);
-
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => {
           if (prev + 1 >= MAX_RECORDING_SECONDS) {
@@ -193,37 +287,28 @@ export default function CreatePage() {
         });
       }, 1000);
     } catch (err) {
-      console.error('Recorder error:', err);
-      setCameraError('Recording is not supported in this browser. Please upload a video instead.');
+      console.error(err);
+      setCameraError('Recording is not supported here. Use Upload instead.');
     }
   };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopStream();
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [stopStream]);
 
   const formatTime = (secs) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
+    return m + ':' + String(s).padStart(2, '0');
   };
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (!file.type.startsWith('video/')) {
-      alert('Please select a video file');
+      alert('Please choose a video file');
       return;
     }
-
+    stopStream();
     setSelectedFile(file);
-    const url = URL.createObjectURL(file);
-    setVideoPreview(url);
+    setVideoPreview(URL.createObjectURL(file));
+    e.target.value = '';
   };
 
   const handleDiscard = () => {
@@ -233,79 +318,71 @@ export default function CreatePage() {
     setCaption('');
     setTaggedProducts([]);
     setIsPlaying(false);
+    setPostStatus('');
+    startedCameraRef.current = false;
+    setTimeout(() => startCamera(), 40);
   };
 
-  const togglePlayPause = () => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      videoRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleProductSearch = async (query) => {
-    setSearchQuery(query);
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    setSearching(true);
+  const loadMyProducts = useCallback(async () => {
+    if (!user?.id && !user?.userId) return;
+    setLoadingProducts(true);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=products&limit=10`);
-      if (res.ok) {
-        const data = await res.json();
-        setSearchResults(data.products || []);
-      }
-    } catch (err) {
-      console.error('Search error:', err);
+      const sellerId = user.id || user.userId;
+      const res = await fetch(
+        '/api/listings/products?sellerId=' + encodeURIComponent(sellerId),
+      );
+      const data = await res.json().catch(() => ({}));
+      const list = Array.isArray(data.products) ? data.products : [];
+      // Active listings only
+      setMyProducts(list.filter((p) => !p.status || p.status === 'active'));
+    } catch {
+      setMyProducts([]);
     } finally {
-      setSearching(false);
+      setLoadingProducts(false);
     }
+  }, [user]);
+
+  const openProductPicker = () => {
+    setShowProductSearch(true);
+    setSearchQuery('');
+    loadMyProducts();
   };
+
+  const filteredProducts = myProducts.filter((p) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (p.title || '').toLowerCase().includes(q) ||
+      (p.category || '').toLowerCase().includes(q)
+    );
+  });
 
   const handleAddProduct = (product) => {
-    if (taggedProducts.find((p) => p.id === product.id)) {
-      alert('Product already tagged');
-      return;
-    }
+    if (taggedProducts.find((p) => p.id === product.id)) return;
     setTaggedProducts([...taggedProducts, product]);
     setShowProductSearch(false);
     setSearchQuery('');
-    setSearchResults([]);
-  };
-
-  const handleRemoveProduct = (productId) => {
-    setTaggedProducts(taggedProducts.filter((p) => p.id !== productId));
   };
 
   const handlePost = async () => {
-    if (!selectedFile) return;
-
-    // ── REQUIRED: at least one product must be tagged before posting ──
+    if (!selectedFile || isPosting) return;
     if (taggedProducts.length === 0) {
-      alert(
-        'Every video must showcase at least one product. Tap "Add Product" to tag one before posting.'
-      );
+      alert('Tag at least one of your products before posting.');
+      openProductPicker();
       return;
     }
 
     setIsPosting(true);
+    setPostStatus('Preparing video…');
     try {
-      // Upload video
-      const { url: videoUrl, error: uploadError } = await upload({
-        file: selectedFile,
-      });
-
-      if (uploadError) {
-        alert('Video upload failed: ' + uploadError);
-        setIsPosting(false);
-        return;
+      const fileToSend = await compressVideo(selectedFile);
+      setPostStatus('Uploading…');
+      const { url: videoUrl, error: uploadError } = await upload({ file: fileToSend });
+      if (uploadError || !videoUrl) {
+        throw new Error(uploadError || 'Upload failed. Check your connection and try again.');
       }
 
-      // Create video post — same payload shape as the mobile app
+      setPostStatus('Publishing…');
       const response = await fetch('/api/videos/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -320,255 +397,158 @@ export default function CreatePage() {
           })),
         }),
       });
-
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to post video');
+        throw new Error(data.error || 'Could not publish. Please try again.');
       }
 
-      alert('Video posted successfully!');
+      setPostStatus('Posted!');
+      // TikTok-like: leave create flow immediately
       window.location.href = '/profile';
     } catch (error) {
       console.error('Post error:', error);
-      alert(error.message);
-    } finally {
+      alert(error.message || 'Could not post video');
       setIsPosting(false);
+      setPostStatus('');
     }
   };
 
   if (userLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-12 h-12 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
+        <div className="w-12 h-12 border-2 border-white/20 border-t-[#D4AF37] rounded-full animate-spin" />
       </div>
     );
   }
+  if (!user) return null;
 
-  if (!user) {
-    return null;
-  }
-
+  // ── Camera / capture (no intermediate marketing screen) ──
   if (!videoPreview) {
     return (
-      <div className="min-h-screen bg-black text-white">
-        {/* Header */}
-        <div className="sticky top-0 z-50 bg-black border-b border-white/10">
-          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div className="fixed inset-0 z-50 bg-black flex flex-col">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+
+        <div className="relative flex-1 flex items-center justify-center overflow-hidden">
+          <video
+            ref={liveVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+            style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+          />
+
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4">
             <button
-              onClick={() => window.history.back()}
-              className="hover:opacity-70 transition-opacity"
+              type="button"
+              onClick={() => (window.location.href = '/')}
+              className="w-11 h-11 bg-black/50 rounded-full flex items-center justify-center"
             >
-              <X size={24} color="white" />
+              <X size={22} color="white" />
             </button>
-            <h1 className="text-white text-lg font-semibold">Create Video</h1>
-            <div className="w-6"></div>
+            {isRecording && (
+              <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-full">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-white font-semibold text-sm">
+                  {formatTime(recordingTime)} / {formatTime(MAX_RECORDING_SECONDS)}
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={flipCamera}
+              disabled={isRecording}
+              className="w-11 h-11 bg-black/50 rounded-full flex items-center justify-center disabled:opacity-40"
+            >
+              <SwitchCamera size={22} color="white" />
+            </button>
           </div>
-        </div>
 
-        {/* Upload Options */}
-        <div className="max-w-2xl mx-auto px-4 py-12">
-          <div className="flex flex-col items-center justify-center min-h-[60vh]">
-            <Video size={80} color="rgba(255,255,255,0.2)" />
-            <h2 className="text-white text-2xl font-bold mt-6 mb-2">Create a video</h2>
-            <p className="text-white/60 text-base text-center mb-8 max-w-md">
-              Record with your camera or upload a video to share with the Crestar community
-            </p>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-
-            <div className="flex flex-col sm:flex-row gap-4">
+          {cameraError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 p-8 text-center">
+              <Camera size={48} color="rgba(255,255,255,0.4)" />
+              <p className="text-white/80 mt-4 mb-6 max-w-sm">{cameraError}</p>
               <button
-                onClick={openCamera}
-                className="flex items-center justify-center gap-3 bg-[#D4AF37] text-black px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity"
-              >
-                <Camera size={24} />
-                Record Video
-              </button>
-              <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center justify-center gap-3 bg-white/10 border border-white/20 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/20 transition-colors"
+                className="bg-[#D4AF37] text-black px-6 py-3 rounded-xl font-semibold"
               >
-                <Upload size={24} />
-                Upload Video
+                Upload a video
               </button>
             </div>
+          )}
 
-            <div className="mt-12 w-full max-w-md space-y-4">
-              <div className="flex items-start gap-3 p-4 bg-white/5 rounded-lg border border-white/10">
-                <Video size={20} color="#D4AF37" className="mt-0.5" />
-                <div>
-                  <h3 className="text-white font-semibold mb-1">Shoppable Videos</h3>
-                  <p className="text-white/60 text-sm">
-                    Tag products in your videos to drive sales
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 p-4 bg-white/5 rounded-lg border border-white/10">
-                <ShoppingBag size={20} color="#D4AF37" className="mt-0.5" />
-                <div>
-                  <h3 className="text-white font-semibold mb-1">Earn Commissions</h3>
-                  <p className="text-white/60 text-sm">
-                    Earn the seller-set commission on every sale driven by your videos
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ══════ CAMERA RECORDING MODAL (TikTok-style) ══════ */}
-        {showCamera && (
-          <div className="fixed inset-0 z-[60] bg-black flex flex-col">
-            {/* Live preview */}
-            <div className="relative flex-1 flex items-center justify-center overflow-hidden">
-              <video
-                ref={liveVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-                style={{
-                  transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+          {!cameraError && (
+            <div className="absolute bottom-0 left-0 right-0 pb-10 flex items-center justify-center gap-10">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isRecording) fileInputRef.current?.click();
                 }}
-              />
+                disabled={isRecording}
+                className="flex flex-col items-center gap-1.5 disabled:opacity-40"
+              >
+                <span className="w-12 h-12 rounded-xl bg-white/15 border border-white/30 flex items-center justify-center">
+                  <Upload size={22} color="white" />
+                </span>
+                <span className="text-white text-xs font-semibold">Upload</span>
+              </button>
 
-              {/* Top bar */}
-              <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4">
-                <button
-                  onClick={closeCamera}
-                  className="w-11 h-11 bg-black/50 rounded-full flex items-center justify-center hover:bg-black/70"
-                >
-                  <X size={22} color="white" />
-                </button>
-
-                {isRecording && (
-                  <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-full">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full bg-red-500"
-                      style={{ animation: 'rec-blink 1s infinite' }}
-                    />
-                    <span className="text-white font-semibold text-sm">
-                      {formatTime(recordingTime)} / {formatTime(MAX_RECORDING_SECONDS)}
-                    </span>
-                  </div>
-                )}
-
-                <button
-                  onClick={flipCamera}
-                  disabled={isRecording}
-                  className="w-11 h-11 bg-black/50 rounded-full flex items-center justify-center hover:bg-black/70 disabled:opacity-40"
-                >
-                  <SwitchCamera size={22} color="white" />
-                </button>
-              </div>
-
-              {/* Camera error */}
-              {cameraError && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 p-8 text-center">
-                  <Camera size={48} color="rgba(255,255,255,0.4)" />
-                  <p className="text-white/80 mt-4 mb-6 max-w-sm">{cameraError}</p>
-                  <button
-                    onClick={() => {
-                      closeCamera();
-                      fileInputRef.current?.click();
-                    }}
-                    className="bg-[#D4AF37] text-black px-6 py-3 rounded-xl font-semibold"
-                  >
-                    Upload a video instead
-                  </button>
-                </div>
-              )}
-
-              {/* Bottom controls — record OR upload, like the mobile app */}
-              {!cameraError && (
-                <div className="absolute bottom-0 left-0 right-0 pb-10 flex items-center justify-center gap-10">
-                  {/* Upload option */}
-                  <button
-                    onClick={() => {
-                      if (isRecording) return;
-                      fileInputRef.current?.click();
-                    }}
-                    disabled={isRecording}
-                    className="flex flex-col items-center gap-1.5 disabled:opacity-40"
-                  >
-                    <span className="w-12 h-12 rounded-xl bg-white/15 border border-white/30 flex items-center justify-center backdrop-blur-sm">
-                      <Upload size={22} color="white" />
-                    </span>
-                    <span className="text-white text-xs font-semibold">Upload</span>
-                  </button>
-
-                  {/* Record button */}
-                  <button
-                    onClick={isRecording ? () => stopRecording() : startRecording}
-                    className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center hover:scale-105 transition-transform"
-                  >
-                    {isRecording ? (
-                      <span className="w-8 h-8 bg-red-500 rounded-md flex items-center justify-center">
-                        <Square size={16} color="white" fill="white" />
-                      </span>
-                    ) : (
-                      <span className="w-16 h-16 bg-red-500 rounded-full" />
-                    )}
-                  </button>
-
-                  {/* Spacer to keep record button centered */}
-                  <span className="w-12 flex flex-col items-center gap-1.5 opacity-0 pointer-events-none">
-                    <span className="w-12 h-12" />
-                    <span className="text-xs">Upload</span>
+              <button
+                type="button"
+                onClick={isRecording ? () => stopRecording() : startRecording}
+                className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center"
+              >
+                {isRecording ? (
+                  <span className="w-8 h-8 bg-red-500 rounded-md flex items-center justify-center">
+                    <Square size={16} color="white" fill="white" />
                   </span>
-                </div>
-              )}
-            </div>
+                ) : (
+                  <span className="w-16 h-16 bg-red-500 rounded-full" />
+                )}
+              </button>
 
-            <style jsx global>{`
-              @keyframes rec-blink {
-                0%,
-                100% {
-                  opacity: 1;
-                }
-                50% {
-                  opacity: 0.3;
-                }
-              }
-            `}</style>
-          </div>
-        )}
+              <span className="w-12 opacity-0 pointer-events-none" />
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
+  // ── Compose / post ──
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Header */}
       <div className="sticky top-0 z-50 bg-black border-b border-white/10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
+            type="button"
             onClick={handleDiscard}
-            className="text-white text-base hover:opacity-70 transition-opacity"
+            disabled={isPosting}
+            className="text-white text-base disabled:opacity-40"
           >
             Discard
           </button>
           <h1 className="text-white text-lg font-semibold">New Video</h1>
           <button
+            type="button"
             onClick={handlePost}
             disabled={isPosting}
-            className="text-[#D4AF37] text-base font-semibold hover:opacity-70 transition-opacity disabled:opacity-50"
+            className="text-[#D4AF37] text-base font-semibold disabled:opacity-50"
           >
-            {isPosting ? 'Posting...' : 'Post'}
+            {isPosting ? postStatus || 'Posting…' : 'Post'}
           </button>
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto pb-24">
-        {/* Video Preview */}
-        <div className="relative bg-black aspect-[9/16] max-h-[70vh] mx-auto">
+        <div className="relative bg-black aspect-[9/16] max-h-[55vh] mx-auto">
           <video
             ref={videoRef}
             src={videoPreview}
@@ -578,176 +558,181 @@ export default function CreatePage() {
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
           />
-
-          {/* Play/Pause Overlay */}
           <button
-            onClick={togglePlayPause}
-            className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
+            type="button"
+            onClick={() => {
+              if (!videoRef.current) return;
+              if (isPlaying) videoRef.current.pause();
+              else videoRef.current.play();
+            }}
+            className="absolute inset-0 flex items-center justify-center bg-black/20"
           >
             {isPlaying ? (
-              <Pause size={64} color="white" fill="white" opacity={0.8} />
+              <Pause size={48} color="white" fill="white" opacity={0.7} />
             ) : (
-              <Play size={64} color="white" fill="white" opacity={0.8} />
+              <Play size={48} color="white" fill="white" opacity={0.7} />
             )}
-          </button>
-
-          {/* Retake Button */}
-          <button
-            onClick={handleDiscard}
-            className="absolute top-4 right-4 w-10 h-10 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
-          >
-            <RotateCcw size={20} color="white" />
           </button>
         </div>
 
-        {/* Caption */}
-        <div className="px-4 py-4 border-b border-white/10">
+        <div className="px-4 py-4 space-y-4">
           <textarea
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
-            placeholder="Write a caption..."
-            maxLength={200}
+            placeholder="Add a caption…"
             rows={3}
-            className="w-full bg-transparent text-white text-base outline-none resize-none placeholder:text-white/40"
+            className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-white/40 outline-none focus:border-[#D4AF37] resize-none"
           />
-          <p className="text-white/40 text-xs text-right mt-1">{caption.length}/200</p>
-        </div>
 
-        {/* Tagged Products */}
-        <div className="px-4 py-4 border-b border-white/10">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-white font-semibold text-base">Tagged Products</h3>
-            <button
-              onClick={() => setShowProductSearch(true)}
-              className="flex items-center gap-2 text-[#D4AF37] text-sm font-semibold hover:opacity-70 transition-opacity"
-            >
-              <Plus size={18} />
-              Add Product
-            </button>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-semibold flex items-center gap-2">
+                <ShoppingBag size={18} color="#D4AF37" /> Tag products
+              </p>
+              <button
+                type="button"
+                onClick={openProductPicker}
+                className="text-[#D4AF37] text-sm font-semibold flex items-center gap-1"
+              >
+                <Plus size={16} /> Add
+              </button>
+            </div>
+            {taggedProducts.length === 0 ? (
+              <button
+                type="button"
+                onClick={openProductPicker}
+                className="w-full border border-dashed border-white/20 rounded-xl py-4 text-white/50 text-sm"
+              >
+                Tag products from your shop
+              </button>
+            ) : (
+              <div className="space-y-2">
+                {taggedProducts.map((product) => (
+                  <div
+                    key={product.id}
+                    className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10"
+                  >
+                    {productImage(product) ? (
+                      <img
+                        src={productImage(product)}
+                        alt=""
+                        className="w-12 h-12 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-white/10" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{product.title}</p>
+                      <CurrencyPrice
+                        price={parseFloat(product.price) || 0}
+                        originalCurrency="GHS"
+                        showOriginal={false}
+                        size="small"
+                        textStyle={{ color: '#D4AF37', fontSize: '0.875rem', fontWeight: 'bold' }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTaggedProducts(taggedProducts.filter((p) => p.id !== product.id))
+                      }
+                      className="text-white/50"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {taggedProducts.length === 0 ? (
-            <p className="text-white/40 text-sm">
-              Tagging at least one product is required to post. Add a product to make your video
-              shoppable!
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {taggedProducts.map((product) => (
-                <div
-                  key={product.id}
-                  className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10"
-                >
-                  {product.media?.[0] && (
-                    <img
-                      src={product.media[0]}
-                      alt=""
-                      className="w-12 h-12 object-cover rounded-lg"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{product.title}</p>
-                    <CurrencyPrice
-                      price={parseFloat(product.price)}
-                      originalCurrency={product.seller_currency || 'GHS'}
-                      showOriginal={false}
-                      size="small"
-                      textStyle={{
-                        color: '#D4AF37',
-                        fontSize: '0.875rem',
-                        fontWeight: 'bold',
-                      }}
-                    />
-                  </div>
-                  <button
-                    onClick={() => handleRemoveProduct(product.id)}
-                    className="text-white/60 hover:text-white transition-colors"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-              ))}
+          {isPosting && (
+            <div className="rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 px-4 py-3 text-sm text-[#D4AF37]">
+              {postStatus || 'Posting…'}
             </div>
           )}
         </div>
       </div>
 
-      {/* Product Search Modal */}
       {showProductSearch && (
         <div className="fixed inset-0 z-50 bg-black">
           <div className="sticky top-0 z-50 bg-black border-b border-white/10">
             <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
               <button
-                onClick={() => {
-                  setShowProductSearch(false);
-                  setSearchQuery('');
-                  setSearchResults([]);
-                }}
-                className="hover:opacity-70 transition-opacity"
+                type="button"
+                onClick={() => setShowProductSearch(false)}
+                className="text-white"
               >
-                <X size={24} color="white" />
+                <X size={24} />
               </button>
               <div className="flex-1 relative">
                 <Search
                   size={18}
-                  color="rgba(255,255,255,0.4)"
-                  className="absolute left-3 top-1/2 -translate-y-1/2"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
                 />
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => handleProductSearch(e.target.value)}
-                  placeholder="Search your products..."
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search your products…"
                   autoFocus
                   className="w-full bg-white/10 text-white text-base pl-10 pr-4 py-2 rounded-lg outline-none placeholder:text-white/40"
                 />
               </div>
             </div>
           </div>
-
           <div className="max-w-2xl mx-auto px-4 py-4">
-            {searching && (
-              <div className="flex justify-center py-8">
-                <div className="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
+            {loadingProducts ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-16 bg-white/5 rounded-xl animate-pulse" />
+                ))}
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-white/60 mb-4">
+                  {myProducts.length === 0
+                    ? 'No products in your shop yet.'
+                    : 'No matching products.'}
+                </p>
+                {myProducts.length === 0 && (
+                  <a
+                    href="/create-listing"
+                    className="inline-block bg-[#D4AF37] text-black px-6 py-3 rounded-xl font-semibold"
+                  >
+                    Create a listing
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredProducts.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => handleAddProduct(product)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 text-left hover:bg-white/10"
+                  >
+                    {productImage(product) ? (
+                      <img
+                        src={productImage(product)}
+                        alt=""
+                        className="w-14 h-14 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-lg bg-white/10" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{product.title}</p>
+                      <p className="text-[#D4AF37] text-sm font-bold">
+                        GHS {parseFloat(product.price || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <Plus size={20} className="text-white/50" />
+                  </button>
+                ))}
               </div>
             )}
-
-            {!searching && searchResults.length === 0 && searchQuery && (
-              <p className="text-white/60 text-center py-8">No products found</p>
-            )}
-
-            <div className="space-y-2">
-              {searchResults.map((product) => (
-                <button
-                  key={product.id}
-                  onClick={() => handleAddProduct(product)}
-                  className="w-full flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors"
-                >
-                  {product.media?.[0] && (
-                    <img
-                      src={product.media[0]}
-                      alt=""
-                      className="w-14 h-14 object-cover rounded-lg"
-                    />
-                  )}
-                  <div className="flex-1 text-left min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{product.title}</p>
-                    <CurrencyPrice
-                      price={parseFloat(product.price)}
-                      originalCurrency={product.seller_currency || 'GHS'}
-                      showOriginal={false}
-                      size="small"
-                      textStyle={{
-                        color: '#D4AF37',
-                        fontSize: '0.875rem',
-                        fontWeight: 'bold',
-                      }}
-                    />
-                  </div>
-                  <Plus size={20} color="white" />
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       )}
