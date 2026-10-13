@@ -133,9 +133,9 @@ export async function POST(request) {
       }
     }
 
-    // Crestar charges ONE flat 3% platform fee — the only fee on the platform,
-    // identical for every program. The `crestar_apply_platform_fee` database
-    // trigger nets each payout leg too, so these values match the ledger.
+    // Crestar charges ONE flat 5% platform fee — the only fee on the platform,
+    // identical for every program. No subscriptions. The `crestar_apply_platform_fee`
+    // database trigger nets each payout leg too, so these values match the ledger.
     const subtotal = money(unitPrice * quantity);
     const platformFee = platformFeeOn(subtotal);
     const totalAmount = money(subtotal + deliveryFee);
