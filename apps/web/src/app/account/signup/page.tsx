@@ -109,25 +109,35 @@ export default function SignUpPage() {
           return;
         }
 
-        // Neon may create the user without a session when email verification is required
-        // (response token is null; get-session stays empty; sign-in returns EMAIL_NOT_VERIFIED).
         const session = await waitForSession();
+        const inWebView = isWebView || isMobileWebViewContext();
+
         if (!session) {
+          // Neon still withholding session (e.g. email verification still on upstream)
           setInfo(SIGNUP_VERIFY_EMAIL_MESSAGE);
           setLoading(false);
-          // Soft redirect to sign-in after a short beat so the user can read the message
           window.setTimeout(() => {
             window.location.href = `/account/signin${searchString}`;
-          }, 2800);
+          }, 2500);
           return;
         }
 
-        const inWebView = isWebView || isMobileWebViewContext();
-        const destination = inWebView
-          ? EXPO_SUCCESS_PATH
-          : getSafeCallbackUrl(callbackUrl === EXPO_SUCCESS_PATH ? '/' : callbackUrl);
+        // Logged in — optional 6-digit verify later. App is usable immediately.
+        // Soft-prompt verify page (user can Skip).
+        if (inWebView) {
+          window.location.href = EXPO_SUCCESS_PATH;
+          return;
+        }
 
-        window.location.href = destination;
+        const dest = getSafeCallbackUrl(
+          callbackUrl === EXPO_SUCCESS_PATH ? '/' : callbackUrl
+        );
+        // Prefer optional verify UI when not deep-linking elsewhere
+        if (dest === '/' || dest === '/profile') {
+          window.location.href = `/account/verify-email?optional=1&callbackUrl=${encodeURIComponent(dest)}`;
+        } else {
+          window.location.href = dest;
+        }
       } catch (err) {
         console.error('[SignUp] Unexpected error:', err);
         setError(getFriendlyAuthError(err as { message?: string }, 'signup'));
@@ -217,20 +227,8 @@ export default function SignUpPage() {
         <p style={{ color: c.subtle, fontSize: 13, marginTop: 6 }}>Create your account</p>
       </div>
 
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 360,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
-        <form
-          noValidate
-          onSubmit={onSubmit}
-          style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-        >
+      <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <form noValidate onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input
             required
             type="email"
@@ -266,9 +264,7 @@ export default function SignUpPage() {
                 border: `1px solid ${c.errorBorder}`,
               }}
             >
-              <p style={{ color: c.errorText, fontSize: 13, textAlign: 'center', margin: 0 }}>
-                {error}
-              </p>
+              <p style={{ color: c.errorText, fontSize: 13, textAlign: 'center', margin: 0 }}>{error}</p>
             </div>
           )}
 
@@ -281,9 +277,7 @@ export default function SignUpPage() {
                 border: `1px solid ${c.infoBorder}`,
               }}
             >
-              <p style={{ color: c.infoText, fontSize: 13, textAlign: 'center', margin: 0 }}>
-                {info}
-              </p>
+              <p style={{ color: c.infoText, fontSize: 13, textAlign: 'center', margin: 0 }}>{info}</p>
             </div>
           )}
 
@@ -345,12 +339,7 @@ export default function SignUpPage() {
         <span style={{ color: c.subtle, fontSize: 14 }}>Already have an account? </span>
         <a
           href={`/account/signin${searchString}`}
-          style={{
-            color: c.text,
-            fontSize: 14,
-            fontWeight: 700,
-            textDecoration: 'none',
-          }}
+          style={{ color: c.text, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}
         >
           Sign in
         </a>
