@@ -1,8 +1,7 @@
 // @ts-nocheck
 /**
  * Background video post queue (TikTok-style).
- * Tapping Post enqueues work and navigates away; upload continues while the
- * user browses. Listeners can show a toast when done or failed.
+ * Post returns immediately; upload continues while the user browses.
  */
 
 const listeners = new Set();
@@ -43,6 +42,12 @@ async function putWithProgress(uploadUrl, file, contentType, onProgress) {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', uploadUrl);
     xhr.setRequestHeader('Content-Type', contentType);
+    // Faster on modern browsers when supported
+    try {
+      xhr.timeout = 5 * 60 * 1000;
+    } catch {
+      /* ignore */
+    }
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
         onProgress(Math.round((e.loaded / e.total) * 100));
@@ -54,7 +59,6 @@ async function putWithProgress(uploadUrl, file, contentType, onProgress) {
     };
     xhr.onerror = () => reject(new Error('Network error while uploading'));
     xhr.ontimeout = () => reject(new Error('Upload timed out'));
-    xhr.timeout = 10 * 60 * 1000;
     xhr.send(file);
   });
 }
@@ -72,12 +76,12 @@ export function enqueueVideoPost({ file, caption, taggedProducts }) {
     return;
   }
 
-  // Fire-and-forget background job
   (async () => {
     try {
-      setState({ status: 'uploading', message: 'Uploading…', progress: 0 });
+      setState({ status: 'uploading', message: 'Uploading…', progress: 1 });
 
       const contentType = file.type || 'video/webm';
+      // Presign is a tiny JSON call — run it immediately
       const presignRes = await fetch('/api/upload/presign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,7 +96,12 @@ export function enqueueVideoPost({ file, caption, taggedProducts }) {
         presign.uploadUrl,
         file,
         presign.contentType || contentType,
-        (pct) => setState({ status: 'uploading', message: 'Uploading… ' + pct + '%', progress: pct }),
+        (pct) =>
+          setState({
+            status: 'uploading',
+            message: pct < 100 ? 'Uploading… ' + pct + '%' : 'Almost done…',
+            progress: pct,
+          }),
       );
 
       setState({ status: 'publishing', message: 'Publishing…', progress: 100 });
@@ -117,10 +126,9 @@ export function enqueueVideoPost({ file, caption, taggedProducts }) {
       }
 
       setState({ status: 'done', message: 'Video posted', progress: 100 });
-      // Reset after a short delay so the toast can show
       setTimeout(() => {
         if (state.status === 'done') setState({ status: 'idle', message: '', progress: 0 });
-      }, 4000);
+      }, 3500);
     } catch (err) {
       console.error('Background post failed', err);
       setState({
