@@ -160,7 +160,7 @@ export default function CreateListingPage() {
       missing.push('category');
     }
     if (missing.length) {
-      alert(`Please add a ${missing.join(' and ')} to continue.`);
+      alert('Please add a ' + missing.join(' and ') + ' to continue.');
       return false;
     }
     return true;
@@ -169,13 +169,13 @@ export default function CreateListingPage() {
   const handleSubmit = async () => {
     for (let i = 0; i < variants.length; i++) {
       const v = variants[i];
-      const label = v.color || `Variant ${i + 1}`;
-      if (v.images.length === 0) return alert(`Please add at least one image for ${label}`);
-      if (!v.price) return alert(`Please set a price for ${label}`);
+      const label = v.color || ('Variant ' + (i + 1));
+      if (v.images.length === 0) return alert('Please add at least one image for ' + label);
+      if (!v.price) return alert('Please set a price for ' + label);
       if (listingType === 'physical_goods' && !v.stockQuantity)
-        return alert(`Please enter stock quantity for ${label}`);
+        return alert('Please enter stock quantity for ' + label);
       if (needsPerVariantSizes && sizingCategory !== 'custom' && v.sizes.length === 0)
-        return alert(`Please select at least one size for ${label}`);
+        return alert('Please select at least one size for ' + label);
     }
     setSubmitting(true);
     try {
@@ -312,11 +312,12 @@ export default function CreateListingPage() {
                         setCategory(item);
                         if (item !== 'Other') setCustomCategory('');
                       }}
-                      className={`px-3.5 py-2 rounded-full text-sm border ${
-                        category === item
+                      className={
+                        'px-3.5 py-2 rounded-full text-sm border ' +
+                        (category === item
                           ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-semibold'
-                          : 'bg-white/5 text-white border-white/15'
-                      }`}
+                          : 'bg-white/5 text-white border-white/15')
+                      }
                     >
                       {item}
                     </button>
@@ -346,11 +347,12 @@ export default function CreateListingPage() {
                         setFoodSubcategory('');
                         setCategory('');
                       }}
-                      className={`text-left rounded-xl border p-4 ${
-                        foodHubType === option.value
+                      className={
+                        'text-left rounded-xl border p-4 ' +
+                        (foodHubType === option.value
                           ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
-                          : 'bg-white/5 text-white border-white/15'
-                      }`}
+                          : 'bg-white/5 text-white border-white/15')
+                      }
                     >
                       <div className="font-extrabold">{option.label}</div>
                       <div className="text-xs mt-1 opacity-75">{option.description}</div>
@@ -367,11 +369,12 @@ export default function CreateListingPage() {
                           setFoodSubcategory(item);
                           setCategory(item);
                         }}
-                        className={`px-3 py-2 rounded-full border text-sm ${
-                          foodSubcategory === item
+                        className={
+                          'px-3 py-2 rounded-full border text-sm ' +
+                          (foodSubcategory === item
                             ? 'bg-white text-black border-white'
-                            : 'bg-white/5 text-white border-white/15'
-                        }`}
+                            : 'bg-white/5 text-white border-white/15')
+                        }
                       >
                         {item}
                       </button>
@@ -391,11 +394,12 @@ export default function CreateListingPage() {
                       key={sc.key}
                       type="button"
                       onClick={() => setSizingCategory(sc.key)}
-                      className={`text-left rounded-xl border p-3 ${
-                        sizingCategory === sc.key
+                      className={
+                        'text-left rounded-xl border p-3 ' +
+                        (sizingCategory === sc.key
                           ? 'bg-[#D4AF37]/15 border-[#D4AF37]'
-                          : 'bg-white/5 border-white/15'
-                      }`}
+                          : 'bg-white/5 border-white/15')
+                      }
                     >
                       <div className="font-semibold text-sm">{sc.label}</div>
                       <div className="text-white/50 text-xs mt-0.5">{sc.hint}</div>
@@ -411,11 +415,12 @@ export default function CreateListingPage() {
                           key={sys}
                           type="button"
                           onClick={() => setSizeSystem(sys)}
-                          className={`px-3.5 py-2 rounded-full text-sm border ${
-                            sizeSystem === sys
+                          className={
+                            'px-3.5 py-2 rounded-full text-sm border ' +
+                            (sizeSystem === sys
                               ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-semibold'
-                              : 'bg-white/5 text-white border-white/15'
-                          }`}
+                              : 'bg-white/5 text-white border-white/15')
+                          }
                         >
                           {sys}
                         </button>
@@ -432,11 +437,12 @@ export default function CreateListingPage() {
                           key={st}
                           type="button"
                           onClick={() => setSizeType(st)}
-                          className={`px-3.5 py-2 rounded-full text-sm border ${
-                            sizeType === st
+                          className={
+                            'px-3.5 py-2 rounded-full text-sm border ' +
+                            (sizeType === st
                               ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-semibold'
-                              : 'bg-white/5 text-white border-white/15'
-                          }`}
+                              : 'bg-white/5 text-white border-white/15')
+                          }
                         >
                           {st}
                         </button>
@@ -467,12 +473,14 @@ export default function CreateListingPage() {
                   key={idx}
                   type="button"
                   onClick={() => setVariantIndex(idx)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm border ${\n                    variantIndex === idx
+                  className={
+                    'flex items-center gap-2 px-4 py-2 rounded-full text-sm border ' +
+                    (variantIndex === idx
                       ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-semibold'
-                      : 'bg-white/5 text-white border-white/15'
-                  }`}
+                      : 'bg-white/5 text-white border-white/15')
+                  }
                 >
-                  {v.color || `Variant ${idx + 1}`}
+                  {v.color || ('Variant ' + (idx + 1))}
                   {variants.length > 1 && (
                     <X
                       size={13}
@@ -501,10 +509,12 @@ export default function CreateListingPage() {
                     key={c}
                     type="button"
                     onClick={() => updateVariant('color', c)}
-                    className={`px-3 py-1.5 rounded-full text-sm border ${\n                      currentVariant.color === c
+                    className={
+                      'px-3 py-1.5 rounded-full text-sm border ' +
+                      (currentVariant.color === c
                         ? 'bg-white text-black border-white'
-                        : 'bg-white/5 text-white border-white/15'
-                    }`}
+                        : 'bg-white/5 text-white border-white/15')
+                    }
                   >
                     {c}
                   </button>
@@ -585,10 +595,12 @@ export default function CreateListingPage() {
                       key={s}
                       type="button"
                       onClick={() => toggleVariantSize(s)}
-                      className={`px-3 py-1.5 rounded-full text-sm border ${\n                        currentVariant.sizes.includes(s)
+                      className={
+                        'px-3 py-1.5 rounded-full text-sm border ' +
+                        (currentVariant.sizes.includes(s)
                           ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
-                          : 'bg-white/5 text-white border-white/15'
-                      }`}
+                          : 'bg-white/5 text-white border-white/15')
+                      }
                     >
                       {s}
                     </button>
