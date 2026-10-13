@@ -2,6 +2,7 @@ import './global.css';
 import type { ReactNode } from 'react';
 import { Providers } from './providers';
 import CurrencyRateRefresher from '@/components/CurrencyRateRefresher';
+import PostStatusToast from '@/components/PostStatusToast';
 
 const SITE_URL = 'https://crestarhq.com';
 
@@ -120,6 +121,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Providers>
           <CurrencyRateRefresher />
           {children}
+          <PostStatusToast />
         </Providers>
       </body>
     </html>
