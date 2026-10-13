@@ -2,7 +2,7 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import useUser from '@/utils/useUser';
-import useUpload from '@/utils/useUpload';
+import { enqueueVideoPost } from '@/utils/postVideoQueue';
 import CurrencyPrice from '@/components/CurrencyPrice';
 import {
   X,
@@ -18,102 +18,7 @@ import {
 } from 'lucide-react';
 
 const MAX_RECORDING_SECONDS = 60;
-const COMPRESS_MAX_WIDTH = 720;
 const COMPRESS_BITRATE = 2_500_000;
-
-/** Re-encode large videos client-side so uploads stay small and fast. */
-async function compressVideo(file) {
-  if (!file || !file.type?.startsWith('video/')) return file;
-  // Skip tiny clips
-  if (file.size < 8 * 1024 * 1024) return file;
-  if (typeof document === 'undefined' || typeof MediaRecorder === 'undefined') return file;
-
-  try {
-    const url = URL.createObjectURL(file);
-    const video = document.createElement('video');
-    video.muted = true;
-    video.playsInline = true;
-    video.src = url;
-    await new Promise((resolve, reject) => {
-      video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error('Could not read video'));
-    });
-
-    const scale = Math.min(1, COMPRESS_MAX_WIDTH / (video.videoWidth || COMPRESS_MAX_WIDTH));
-    const w = Math.max(2, Math.round((video.videoWidth || COMPRESS_MAX_WIDTH) * scale / 2) * 2);
-    const h = Math.max(2, Math.round((video.videoHeight || 1280) * scale / 2) * 2);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx || typeof canvas.captureStream !== 'function') {
-      URL.revokeObjectURL(url);
-      return file;
-    }
-
-    const stream = canvas.captureStream(30);
-    // Best-effort audio from original when browser supports it
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioCtx.createMediaElementSource(video);
-      const dest = audioCtx.createMediaStreamDestination();
-      source.connect(dest);
-      dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
-    } catch {
-      // video-only is fine
-    }
-
-    let mimeType = '';
-    for (const c of ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']) {
-      if (MediaRecorder.isTypeSupported(c)) {
-        mimeType = c;
-        break;
-      }
-    }
-
-    const chunks = [];
-    const recorder = new MediaRecorder(stream, {
-      mimeType: mimeType || undefined,
-      videoBitsPerSecond: COMPRESS_BITRATE,
-    });
-    recorder.ondataavailable = (e) => {
-      if (e.data?.size) chunks.push(e.data);
-    };
-
-    const done = new Promise((resolve) => {
-      recorder.onstop = () => resolve();
-    });
-
-    recorder.start(200);
-    await video.play();
-
-    const draw = () => {
-      if (video.paused || video.ended) return;
-      ctx.drawImage(video, 0, 0, w, h);
-      requestAnimationFrame(draw);
-    };
-    draw();
-
-    await new Promise((resolve) => {
-      video.onended = () => resolve();
-    });
-    if (recorder.state !== 'inactive') recorder.stop();
-    await done;
-
-    URL.revokeObjectURL(url);
-    stream.getTracks().forEach((t) => t.stop());
-
-    const type = mimeType || 'video/webm';
-    const blob = new Blob(chunks, { type });
-    if (!blob.size || blob.size >= file.size * 0.95) return file;
-    const ext = type.includes('mp4') ? 'mp4' : 'webm';
-    return new File([blob], `crestar_${Date.now()}.${ext}`, { type });
-  } catch (e) {
-    console.warn('Video compress skipped:', e?.message || e);
-    return file;
-  }
-}
 
 function productImage(p) {
   let media = p.media;
@@ -133,7 +38,6 @@ function productImage(p) {
 
 export default function CreatePage() {
   const { data: user, loading: userLoading } = useUser();
-  const [upload] = useUpload();
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
@@ -145,7 +49,6 @@ export default function CreatePage() {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
-  const [postStatus, setPostStatus] = useState('');
 
   const [cameraError, setCameraError] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -194,15 +97,12 @@ export default function CreatePage() {
         }
       } catch (err) {
         console.error('Camera error:', err);
-        setCameraError(
-          'Camera unavailable. Allow camera and mic, or use Upload.',
-        );
+        setCameraError('Camera unavailable. Allow camera and mic, or use Upload.');
       }
     },
     [facingMode, stopStream],
   );
 
-  // Camera-only entry: no marketing screen
   useEffect(() => {
     if (userLoading || !user || videoPreview || startedCameraRef.current) return;
     startedCameraRef.current = true;
@@ -318,7 +218,6 @@ export default function CreatePage() {
     setCaption('');
     setTaggedProducts([]);
     setIsPlaying(false);
-    setPostStatus('');
     startedCameraRef.current = false;
     setTimeout(() => startCamera(), 40);
   };
@@ -333,7 +232,6 @@ export default function CreatePage() {
       );
       const data = await res.json().catch(() => ({}));
       const list = Array.isArray(data.products) ? data.products : [];
-      // Active listings only
       setMyProducts(list.filter((p) => !p.status || p.status === 'active'));
     } catch {
       setMyProducts([]);
@@ -364,53 +262,21 @@ export default function CreatePage() {
     setSearchQuery('');
   };
 
-  const handlePost = async () => {
+  /** TikTok-style: queue in background and leave create immediately. */
+  const handlePost = () => {
     if (!selectedFile || isPosting) return;
     if (taggedProducts.length === 0) {
       alert('Tag at least one of your products before posting.');
       openProductPicker();
       return;
     }
-
     setIsPosting(true);
-    setPostStatus('Preparing video…');
-    try {
-      const fileToSend = await compressVideo(selectedFile);
-      setPostStatus('Uploading…');
-      const { url: videoUrl, error: uploadError } = await upload({ file: fileToSend });
-      if (uploadError || !videoUrl) {
-        throw new Error(uploadError || 'Upload failed. Check your connection and try again.');
-      }
-
-      setPostStatus('Publishing…');
-      const response = await fetch('/api/videos/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          videoUrl,
-          thumbnailUrl: null,
-          caption,
-          durationSeconds: null,
-          taggedProducts: taggedProducts.map((p) => ({
-            productId: p.id,
-            serviceId: null,
-          })),
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.error || 'Could not publish. Please try again.');
-      }
-
-      setPostStatus('Posted!');
-      // TikTok-like: leave create flow immediately
-      window.location.href = '/profile';
-    } catch (error) {
-      console.error('Post error:', error);
-      alert(error.message || 'Could not post video');
-      setIsPosting(false);
-      setPostStatus('');
-    }
+    enqueueVideoPost({
+      file: selectedFile,
+      caption,
+      taggedProducts,
+    });
+    window.location.href = '/';
   };
 
   if (userLoading) {
@@ -422,7 +288,6 @@ export default function CreatePage() {
   }
   if (!user) return null;
 
-  // ── Camera / capture (no intermediate marketing screen) ──
   if (!videoPreview) {
     return (
       <div className="fixed inset-0 z-50 bg-black flex flex-col">
@@ -433,7 +298,6 @@ export default function CreatePage() {
           onChange={handleFileSelect}
           className="hidden"
         />
-
         <div className="relative flex-1 flex items-center justify-center overflow-hidden">
           <video
             ref={liveVideoRef}
@@ -443,7 +307,6 @@ export default function CreatePage() {
             className="w-full h-full object-cover"
             style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
           />
-
           <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4">
             <button
               type="button"
@@ -469,7 +332,6 @@ export default function CreatePage() {
               <SwitchCamera size={22} color="white" />
             </button>
           </div>
-
           {cameraError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 p-8 text-center">
               <Camera size={48} color="rgba(255,255,255,0.4)" />
@@ -483,7 +345,6 @@ export default function CreatePage() {
               </button>
             </div>
           )}
-
           {!cameraError && (
             <div className="absolute bottom-0 left-0 right-0 pb-10 flex items-center justify-center gap-10">
               <button
@@ -499,7 +360,6 @@ export default function CreatePage() {
                 </span>
                 <span className="text-white text-xs font-semibold">Upload</span>
               </button>
-
               <button
                 type="button"
                 onClick={isRecording ? () => stopRecording() : startRecording}
@@ -513,7 +373,6 @@ export default function CreatePage() {
                   <span className="w-16 h-16 bg-red-500 rounded-full" />
                 )}
               </button>
-
               <span className="w-12 opacity-0 pointer-events-none" />
             </div>
           )}
@@ -522,7 +381,6 @@ export default function CreatePage() {
     );
   }
 
-  // ── Compose / post ──
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="sticky top-0 z-50 bg-black border-b border-white/10">
@@ -542,7 +400,7 @@ export default function CreatePage() {
             disabled={isPosting}
             className="text-[#D4AF37] text-base font-semibold disabled:opacity-50"
           >
-            {isPosting ? postStatus || 'Posting…' : 'Post'}
+            {isPosting ? 'Posting…' : 'Post'}
           </button>
         </div>
       </div>
@@ -645,12 +503,6 @@ export default function CreatePage() {
               </div>
             )}
           </div>
-
-          {isPosting && (
-            <div className="rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 px-4 py-3 text-sm text-[#D4AF37]">
-              {postStatus || 'Posting…'}
-            </div>
-          )}
         </div>
       </div>
 
@@ -658,18 +510,11 @@ export default function CreatePage() {
         <div className="fixed inset-0 z-50 bg-black">
           <div className="sticky top-0 z-50 bg-black border-b border-white/10">
             <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowProductSearch(false)}
-                className="text-white"
-              >
+              <button type="button" onClick={() => setShowProductSearch(false)} className="text-white">
                 <X size={24} />
               </button>
               <div className="flex-1 relative">
-                <Search
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
-                />
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
                 <input
                   type="text"
                   value={searchQuery}
