@@ -23,31 +23,31 @@ import {
   Truck,
 } from 'lucide-react';
 
+/** App-wide dark shell — matches feed, shop, tabs */
+const shell = 'min-h-screen bg-black text-white';
+
 function ProfileSkeleton() {
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24">
+    <div className={`${shell} pb-24`}>
       <div className="max-w-2xl mx-auto px-4 pt-10 flex flex-col items-center">
-        <div className="w-24 h-24 rounded-full bg-black/5 dark:bg-white/10 animate-pulse mb-4" />
-        <div className="h-5 w-36 rounded bg-black/5 dark:bg-white/10 animate-pulse mb-2" />
-        <div className="h-3.5 w-24 rounded bg-black/5 dark:bg-white/10 animate-pulse mb-6" />
+        <div className="w-24 h-24 rounded-full bg-white/10 animate-pulse mb-4" />
+        <div className="h-5 w-36 rounded bg-white/10 animate-pulse mb-2" />
+        <div className="h-3.5 w-24 rounded bg-white/10 animate-pulse mb-6" />
         <div className="flex gap-10 mb-6">
           {[0, 1, 2].map((i) => (
             <div key={i} className="flex flex-col items-center gap-1">
-              <div className="h-4 w-8 rounded bg-black/5 dark:bg-white/10 animate-pulse" />
-              <div className="h-3 w-12 rounded bg-black/5 dark:bg-white/10 animate-pulse" />
+              <div className="h-4 w-8 rounded bg-white/10 animate-pulse" />
+              <div className="h-3 w-12 rounded bg-white/10 animate-pulse" />
             </div>
           ))}
         </div>
         <div className="flex gap-2 w-full max-w-sm mb-8">
-          <div className="flex-1 h-10 rounded-lg bg-black/5 dark:bg-white/10 animate-pulse" />
-          <div className="flex-1 h-10 rounded-lg bg-black/5 dark:bg-white/10 animate-pulse" />
+          <div className="flex-1 h-10 rounded-lg bg-white/10 animate-pulse" />
+          <div className="flex-1 h-10 rounded-lg bg-white/10 animate-pulse" />
         </div>
         <div className="grid grid-cols-3 gap-0.5 w-full">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="aspect-[3/4] bg-black/5 dark:bg-white/10 animate-pulse"
-            />
+            <div key={i} className="aspect-[3/4] bg-white/10 animate-pulse" />
           ))}
         </div>
       </div>
@@ -58,23 +58,23 @@ function ProfileSkeleton() {
 
 function GuestProfile() {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className={`${shell} flex flex-col`}>
       <div className="flex-1 flex flex-col items-center justify-center px-8">
-        <div className="w-24 h-24 rounded-full bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.1] flex items-center justify-center mb-6">
-          <UserIcon size={40} className="text-black/30 dark:text-white/40" strokeWidth={1.25} />
+        <div className="w-24 h-24 rounded-full bg-white/[0.06] border border-white/10 flex items-center justify-center mb-6">
+          <UserIcon size={40} className="text-white/40" strokeWidth={1.25} />
         </div>
-        <h1 className="text-[22px] font-semibold tracking-tight mb-7 text-center">
+        <h1 className="text-[22px] font-semibold tracking-tight mb-7 text-center text-white">
           Sign in to Crestar
         </h1>
         <a
           href="/account/signin?callbackUrl=/profile"
-          className="w-full max-w-[320px] bg-[#D4AF37] text-black py-[15px] rounded-full font-bold text-center text-[16px] active:opacity-90 transition-opacity"
+          className="w-full max-w-[320px] bg-[#D4AF37] text-black py-[15px] rounded-full font-bold text-center text-[16px] active:opacity-90"
         >
           Sign In
         </a>
         <a
           href="/account/signup?callbackUrl=/profile"
-          className="mt-5 text-sm font-medium text-black/45 dark:text-white/50 hover:text-black/70 dark:hover:text-white/70"
+          className="mt-5 text-sm font-medium text-white/50 active:text-white/70"
         >
           Create account
         </a>
@@ -124,7 +124,7 @@ export default function ProfilePage() {
         const res = await fetch('/api/business-centers');
         if (res.ok) {
           const data = await res.json();
-          if (data.center?.verification_status === 'approved') {
+          if (data.center?.verification_status === 'approved' || data.center?.status === 'active') {
             const type = data.center.center_type;
             if (type === 'seller' || type === 'foodhub') setIsSeller(true);
             else if (type === 'creator') setIsCreator(true);
@@ -188,24 +188,24 @@ export default function ProfilePage() {
   if (!user) return <GuestProfile />;
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24">
+    <div className={`${shell} pb-24`}>
       <div className="max-w-2xl mx-auto px-4 pt-4 flex items-center justify-end">
         <button
           type="button"
           onClick={() => setShowDrawer(true)}
-          className="w-10 h-10 flex items-center justify-center rounded-full active:bg-black/5 dark:active:bg-white/10"
+          className="w-10 h-10 flex items-center justify-center rounded-full active:bg-white/10"
         >
-          <Menu size={24} />
+          <Menu size={24} className="text-white" />
         </button>
       </div>
 
       <div className="max-w-2xl mx-auto px-4">
         <div className="flex flex-col items-center">
-          <div className="w-24 h-24 rounded-full overflow-hidden bg-black/5 dark:bg-white/10 border border-black/5 dark:border-white/15 flex items-center justify-center mb-3">
+          <div className="w-24 h-24 rounded-full overflow-hidden bg-white/10 border border-white/15 flex items-center justify-center mb-3">
             {user.profile_image ? (
               <img src={user.profile_image} alt={displayName} className="w-full h-full object-cover" />
             ) : (
-              <span className="text-3xl font-bold opacity-70">
+              <span className="text-3xl font-bold text-white/70">
                 {(displayName || 'U').charAt(0).toUpperCase()}
               </span>
             )}
@@ -213,31 +213,31 @@ export default function ProfilePage() {
 
           <div className="flex flex-col items-center mb-4">
             <div className="flex items-center gap-1.5">
-              <h2 className="text-xl font-bold leading-tight">{displayName}</h2>
+              <h2 className="text-white text-xl font-bold leading-tight">{displayName}</h2>
               {isVerified && <BadgeCheck size={18} className="text-[#D4AF37]" />}
             </div>
-            <span className="text-black/50 dark:text-white/55 text-sm mt-1">@{username}</span>
+            <span className="text-white/55 text-sm mt-1">@{username}</span>
           </div>
 
           <div className="flex items-center gap-10 mb-4">
             <div className="text-center">
-              <p className="font-bold text-lg">{user.following_count ?? 0}</p>
-              <p className="text-black/45 dark:text-white/50 text-xs">Following</p>
+              <p className="text-white font-bold text-lg">{user.following_count ?? 0}</p>
+              <p className="text-white/50 text-xs">Following</p>
             </div>
             <div className="text-center">
-              <p className="font-bold text-lg">{user.followers_count ?? 0}</p>
-              <p className="text-black/45 dark:text-white/50 text-xs">Followers</p>
+              <p className="text-white font-bold text-lg">{user.followers_count ?? 0}</p>
+              <p className="text-white/50 text-xs">Followers</p>
             </div>
             <div className="text-center">
-              <p className="font-bold text-lg">{posts.length}</p>
-              <p className="text-black/45 dark:text-white/50 text-xs">Posts</p>
+              <p className="text-white font-bold text-lg">{posts.length}</p>
+              <p className="text-white/50 text-xs">Posts</p>
             </div>
           </div>
 
           {user.bio && user.bio !== '✨ Content Creator' ? (
-            <p className="text-sm text-center max-w-sm mb-5 opacity-80">{user.bio}</p>
+            <p className="text-white/80 text-sm text-center max-w-sm mb-5">{user.bio}</p>
           ) : (
-            <a href="/edit-profile" className="text-black/40 dark:text-white/40 text-sm mb-5">
+            <a href="/edit-profile" className="text-white/40 text-sm mb-5">
               + Add bio
             </a>
           )}
@@ -245,27 +245,27 @@ export default function ProfilePage() {
           <div className="flex items-center gap-2 w-full max-w-sm mb-6">
             <a
               href="/edit-profile"
-              className="flex-1 bg-black/[0.06] dark:bg-white/10 border border-black/[0.06] dark:border-white/15 text-center py-2.5 rounded-lg font-semibold text-sm active:opacity-80"
+              className="flex-1 bg-white/10 border border-white/15 text-center py-2.5 rounded-lg font-semibold text-sm active:opacity-80"
             >
               Edit profile
             </a>
             <button
               type="button"
               onClick={handleShareProfile}
-              className="flex-1 bg-black/[0.06] dark:bg-white/10 border border-black/[0.06] dark:border-white/15 py-2.5 rounded-lg font-semibold text-sm active:opacity-80"
+              className="flex-1 bg-white/10 border border-white/15 py-2.5 rounded-lg font-semibold text-sm active:opacity-80"
             >
               Share profile
             </button>
             <a
               href="/wallet"
-              className="w-11 h-10 bg-black/[0.06] dark:bg-white/10 border border-black/[0.06] dark:border-white/15 rounded-lg flex items-center justify-center active:opacity-80"
+              className="w-11 h-10 bg-white/10 border border-white/15 rounded-lg flex items-center justify-center active:opacity-80"
             >
               <Wallet size={18} className="text-[#D4AF37]" />
             </a>
           </div>
         </div>
 
-        <div className="flex border-b border-black/10 dark:border-white/10 mb-1">
+        <div className="flex border-b border-white/10 mb-1">
           {tabs.map((tab) => {
             const TabIcon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -276,12 +276,9 @@ export default function ProfilePage() {
                 onClick={() => setActiveTab(tab.id)}
                 className="flex-1 py-3 flex items-center justify-center relative"
               >
-                <TabIcon
-                  size={20}
-                  className={isActive ? 'opacity-100' : 'opacity-40'}
-                />
+                <TabIcon size={20} className={isActive ? 'text-white' : 'text-white/40'} />
                 {isActive && (
-                  <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-current rounded-full" />
+                  <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-white rounded-full" />
                 )}
               </button>
             );
@@ -293,30 +290,21 @@ export default function ProfilePage() {
             {loadingPosts ? (
               <div className="grid grid-cols-3 gap-0.5">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="aspect-[3/4] bg-black/5 dark:bg-white/10 animate-pulse"
-                  />
+                  <div key={i} className="aspect-[3/4] bg-white/10 animate-pulse" />
                 ))}
               </div>
             ) : posts.length === 0 ? (
-              <div className="text-center py-16 text-black/40 dark:text-white/40 text-sm">
-                No posts yet
-              </div>
+              <div className="text-center py-16 text-white/40 text-sm">No posts yet</div>
             ) : (
               <div className="grid grid-cols-3 gap-0.5">
                 {posts.map((video) => (
                   <a
                     key={video.id}
                     href={`/video/${video.id}`}
-                    className="relative aspect-[3/4] bg-black/5 dark:bg-white/5 overflow-hidden"
+                    className="relative aspect-[3/4] bg-white/5 overflow-hidden"
                   >
                     {video.thumbnail_url ? (
-                      <img
-                        src={video.thumbnail_url}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={video.thumbnail_url} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <video
                         src={video.video_url}
@@ -334,9 +322,7 @@ export default function ProfilePage() {
         )}
 
         {activeTab !== 'posts' && (
-          <div className="text-center py-16 text-black/40 dark:text-white/40 text-sm">
-            Coming soon
-          </div>
+          <div className="text-center py-16 text-white/40 text-sm">Coming soon</div>
         )}
       </div>
 
@@ -344,12 +330,12 @@ export default function ProfilePage() {
         <div className="fixed inset-0 z-50">
           <button
             type="button"
-            className="absolute inset-0 bg-black/40 dark:bg-black/60"
+            className="absolute inset-0 bg-black/60"
             onClick={() => setShowDrawer(false)}
             aria-label="Close"
           />
-          <div className="absolute right-0 top-0 bottom-0 w-72 bg-background border-l border-black/10 dark:border-white/10 p-4">
-            <p className="text-black/40 dark:text-white/40 text-xs uppercase mb-4">Menu</p>
+          <div className="absolute right-0 top-0 bottom-0 w-72 bg-black border-l border-white/10 p-4">
+            <p className="text-white/40 text-xs uppercase mb-4">Menu</p>
             <div className="space-y-1">
               {drawerItems.map((item) => {
                 const Icon = item.icon;
@@ -357,9 +343,9 @@ export default function ProfilePage() {
                   <a
                     key={item.label}
                     href={item.href}
-                    className="flex items-center gap-3 px-3 py-3 rounded-lg active:bg-black/5 dark:active:bg-white/5"
+                    className="flex items-center gap-3 px-3 py-3 rounded-lg active:bg-white/5 text-white"
                   >
-                    <Icon size={18} className="opacity-70" />
+                    <Icon size={18} className="text-white/70" />
                     <span className="text-sm font-medium">{item.label}</span>
                   </a>
                 );
