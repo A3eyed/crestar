@@ -1,18 +1,22 @@
 // @ts-nocheck
 import sql from '@/app/api/utils/sql';
 import { auth } from '@/auth';
+import { resolveUserId } from '@/app/api/utils/auth';
+
+const PENDING_STATUSES = ['paid', 'preparing', 'ready_for_pickup', 'in_transit'];
 
 export async function GET(request) {
   try {
-    // Get authenticated user
-    const session = await auth();
-    if (!session?.user?.id) {
+    let userId = await resolveUserId(request).catch(() => null);
+    if (!userId) {
+      const session = await auth();
+      userId = session?.user?.id || null;
+    }
+    if (!userId) {
       return Response.json({ error: 'Unauthorized - Please sign in' }, { status: 401 });
     }
+    userId = String(userId);
 
-    const userId = session.user.id.toString();
-
-    // Get user's identity_id
     const userResult = await sql`
       SELECT identity_id FROM auth_users WHERE id = ${userId} LIMIT 1
     `;
@@ -23,19 +27,14 @@ export async function GET(request) {
 
     let identityId = userResult[0].identity_id;
 
-    // Auto-create identity if user doesn't have one
     if (!identityId) {
       const [newIdentity] = await sql`
         INSERT INTO identities DEFAULT VALUES RETURNING id
       `;
       identityId = newIdentity.id;
-
-      // Link identity to user
       await sql`
         UPDATE auth_users SET identity_id = ${identityId} WHERE id = ${userId}
       `;
-
-      // Also create identity_account link
       await sql`
         INSERT INTO identity_accounts (identity_id, user_id, is_primary)
         VALUES (${identityId}, ${userId}, true)
@@ -43,18 +42,16 @@ export async function GET(request) {
       `;
     }
 
-    // Ensure wallet account exists
     await sql`
       INSERT INTO wallet_accounts (identity_id, account_type, currency, actual_balance, pending_balance)
       VALUES (${identityId}, 'personal', 'GHS', 0, 0)
       ON CONFLICT (identity_id) DO NOTHING
     `;
 
-    // Get wallet balances from new system
     const walletResult = await sql`
-      SELECT actual_balance, pending_balance 
-      FROM wallet_accounts 
-      WHERE identity_id = ${identityId} 
+      SELECT actual_balance, pending_balance, currency
+      FROM wallet_accounts
+      WHERE identity_id = ${identityId}
       LIMIT 1
     `;
 
@@ -63,12 +60,44 @@ export async function GET(request) {
     }
 
     const wallet = walletResult[0];
+    const available = parseFloat(wallet.actual_balance) || 0;
+
+    // Live pending from paid orders not yet delivered (escrow hold for sellers)
+    let escrowPending = 0;
+    let pendingOrderCount = 0;
+    try {
+      const pendingRows = await sql`
+        SELECT
+          COALESCE(SUM(COALESCE(seller_payout, total_amount * 0.97)), 0) AS pending_sum,
+          COUNT(*)::int AS cnt
+        FROM orders
+        WHERE seller_id = ${userId}
+          AND status = ANY(${PENDING_STATUSES})
+          AND (payment_status = 'paid' OR status = 'paid' OR status = 'preparing'
+               OR status = 'ready_for_pickup' OR status = 'in_transit')
+      `;
+      escrowPending = parseFloat(pendingRows?.[0]?.pending_sum) || 0;
+      pendingOrderCount = pendingRows?.[0]?.cnt || 0;
+    } catch (e) {
+      console.warn('pending escrow query', e?.message || e);
+      escrowPending = parseFloat(wallet.pending_balance) || 0;
+    }
+
+    // Prefer the larger of ledger pending vs live escrow (avoids double-count drift)
+    const ledgerPending = parseFloat(wallet.pending_balance) || 0;
+    const pendingBalance = Math.max(ledgerPending, escrowPending);
 
     return Response.json({
-      actualBalance: parseFloat(wallet.actual_balance),
-      pendingBalance: parseFloat(wallet.pending_balance),
-      // Legacy field for backward compatibility
-      balance: parseFloat(wallet.actual_balance),
+      actualBalance: available,
+      pendingBalance,
+      balance: available,
+      currency: wallet.currency || 'GHS',
+      pendingOrderCount,
+      pendingSource: 'orders_escrow',
+      message:
+        pendingBalance > 0
+          ? 'Pending includes earnings from orders awaiting buyer delivery confirmation.'
+          : undefined,
     });
   } catch (error) {
     console.error('Get wallet balance error:', error);
