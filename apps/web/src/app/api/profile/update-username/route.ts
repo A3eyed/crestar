@@ -3,25 +3,44 @@ import sql from '@/app/api/utils/sql';
 import { resolveUserId } from '@/app/api/utils/auth';
 
 async function ensureProfileRow(userId) {
-  await sql`
-    INSERT INTO auth_users (id, email, name, username, display_name, profile_image)
-    SELECT
-      u.id,
-      u.email,
-      u.name,
-      LOWER(REGEXP_REPLACE(COALESCE(u.username, split_part(u.email, '@', 1)), '[^a-zA-Z0-9._]', '', 'g')),
-      COALESCE(u.display_name, u.name),
-      COALESCE(u.profile_image, u.image)
-    FROM "user" u
-    WHERE u.id = ${userId}
-      AND NOT EXISTS (SELECT 1 FROM auth_users a WHERE a.id = u.id)
-  `;
+  try {
+    await sql`
+      INSERT INTO auth_users (id, email, name, username, display_name, profile_image)
+      SELECT
+        u.id,
+        u.email,
+        u.name,
+        LOWER(
+          REGEXP_REPLACE(
+            COALESCE(NULLIF(u.username, ''), split_part(u.email, '@', 1)),
+            '[^a-zA-Z0-9._]',
+            '',
+            'g'
+          )
+        ),
+        COALESCE(NULLIF(u.name, ''), split_part(u.email, '@', 1)),
+        u.image
+      FROM "user" u
+      WHERE u.id = ${userId}
+        AND NOT EXISTS (SELECT 1 FROM auth_users a WHERE a.id = u.id)
+    `;
+  } catch {
+    await sql`
+      INSERT INTO auth_users (id, email, name, username, display_name)
+      SELECT
+        u.id,
+        u.email,
+        u.name,
+        LOWER(REGEXP_REPLACE(split_part(u.email, '@', 1), '[^a-zA-Z0-9._]', '', 'g')),
+        COALESCE(NULLIF(u.name, ''), split_part(u.email, '@', 1))
+      FROM "user" u
+      WHERE u.id = ${userId}
+        AND NOT EXISTS (SELECT 1 FROM auth_users a WHERE a.id = u.id)
+    `;
+  }
 }
 
-/**
- * POST /api/profile/update-username
- * TikTok-style: 2–24 chars, letters/numbers/._ , once every 30 days.
- */
+/** POST /api/profile/update-username — TikTok-style handle */
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -44,7 +63,7 @@ export async function POST(request) {
           error:
             'Username must be 2-24 characters and contain only letters, numbers, underscore, or period',
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -73,7 +92,6 @@ export async function POST(request) {
       WHERE LOWER(username) = ${username}
       AND id != ${userId}
     `;
-
     if (existing) {
       return Response.json({ error: 'Username already taken' }, { status: 400 });
     }
@@ -84,26 +102,23 @@ export async function POST(request) {
       WHERE id = ${userId}
     `;
 
-    if (currentUser?.username && currentUser.username.toLowerCase() === username) {
-      return Response.json({
-        success: true,
-        user: currentUser,
-        message: 'Username unchanged',
-      });
+    if (!currentUser) {
+      return Response.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    if (currentUser?.username_last_changed) {
+    if (currentUser.username && currentUser.username.toLowerCase() === username) {
+      return Response.json({ success: true, user: currentUser, message: 'Username unchanged' });
+    }
+
+    if (currentUser.username_last_changed) {
       const daysSinceLastChange = Math.floor(
         (Date.now() - new Date(currentUser.username_last_changed).getTime()) /
-          (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24),
       );
-
       if (daysSinceLastChange < 30) {
         return Response.json(
-          {
-            error: `You can change your username again in ${30 - daysSinceLastChange} days`,
-          },
-          { status: 400 }
+          { error: `You can change your username again in ${30 - daysSinceLastChange} days` },
+          { status: 400 },
         );
       }
     }
@@ -119,11 +134,12 @@ export async function POST(request) {
       RETURNING id, username, email, display_name, bio, profile_image, name
     `;
 
-    await sql`
-      UPDATE "user"
-      SET username = ${username}, "updatedAt" = NOW()
-      WHERE id = ${userId}
-    `;
+    // Best-effort sync to Neon Auth user.username if column exists
+    try {
+      await sql`UPDATE "user" SET username = ${username}, "updatedAt" = NOW() WHERE id = ${userId}`;
+    } catch {
+      // username column may not exist on Managed Auth user table
+    }
 
     return Response.json({ success: true, user: updatedUser });
   } catch (error) {
@@ -131,6 +147,9 @@ export async function POST(request) {
     if (String(error?.message || '').includes('unique') || error?.code === '23505') {
       return Response.json({ error: 'Username already taken' }, { status: 400 });
     }
-    return Response.json({ error: 'Failed to update username' }, { status: 500 });
+    return Response.json(
+      { error: 'Failed to update username', detail: String(error?.message || error) },
+      { status: 500 },
+    );
   }
 }
