@@ -4,9 +4,8 @@ import sql from '@/app/api/utils/sql';
 
 /**
  * GET /api/admin/analytics
- * Real platform analytics for the admin dashboard (no mock data).
- * Returns monthly revenue, order volume, user growth, category
- * distribution and revenue by order type — all from the database.
+ * Real platform analytics for the admin dashboard (no mock / Anything AI data).
+ * Queries live Neon tables only.
  */
 export async function GET() {
   try {
@@ -17,23 +16,31 @@ export async function GET() {
 
     const [admin] = await sql`
       SELECT id, role FROM auth_users
-      WHERE id = ${session.user.id} AND role IN ('admin', 'owner', 'moderator')
+      WHERE id = ${session.user.id}
+        AND (role IN ('admin', 'owner', 'moderator') OR is_admin = true)
     `;
     if (!admin) {
       return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    const [
-      revenueRows,
-      userGrowthRows,
-      sellerGrowthRows,
-      delivererGrowthRows,
-      categoryRows,
-      typeRows,
-      [totals],
-    ] = await sql.transaction([
-      // Monthly GMV + platform fees + order count (last 6 months)
-      sql`
+    // Run queries individually so one missing table doesn't kill the whole response
+    let revenueRows = [];
+    let userGrowthRows = [];
+    let sellerGrowthRows = [];
+    let delivererGrowthRows = [];
+    let categoryRows = [];
+    let typeRows = [];
+    let totals = {
+      users: 0,
+      paid_orders: 0,
+      gmv: 0,
+      platform_fees: 0,
+      videos: 0,
+      products: 0,
+    };
+
+    try {
+      revenueRows = await sql`
         SELECT
           to_char(date_trunc('month', created_at), 'YYYY-MM') as month,
           COALESCE(SUM(total_amount), 0) as gmv,
@@ -44,60 +51,87 @@ export async function GET() {
           AND payment_status = 'paid'
         GROUP BY 1
         ORDER BY 1
-      `,
-      // New users per month
-      sql`
+      `;
+    } catch (e) {
+      console.error('analytics revenue:', e?.message || e);
+    }
+
+    try {
+      userGrowthRows = await sql`
         SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') as month, COUNT(*) as total
         FROM auth_users
         WHERE created_at >= date_trunc('month', NOW()) - INTERVAL '5 months'
         GROUP BY 1 ORDER BY 1
-      `,
-      // New sellers per month
-      sql`
+      `;
+    } catch (e) {
+      console.error('analytics users:', e?.message || e);
+    }
+
+    try {
+      sellerGrowthRows = await sql`
         SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') as month, COUNT(*) as total
         FROM professional_profiles
         WHERE created_at >= date_trunc('month', NOW()) - INTERVAL '5 months'
         GROUP BY 1 ORDER BY 1
-      `,
-      // New deliverers per month
-      sql`
+      `;
+    } catch (e) {
+      console.error('analytics sellers:', e?.message || e);
+    }
+
+    try {
+      delivererGrowthRows = await sql`
         SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') as month, COUNT(*) as total
         FROM deliverer_profiles
         WHERE created_at >= date_trunc('month', NOW()) - INTERVAL '5 months'
         GROUP BY 1 ORDER BY 1
-      `,
-      // Revenue by product category (paid orders joined to products)
-      sql`
-        SELECT COALESCE(p.category, 'Other') as name, COALESCE(SUM(o.total_amount), 0) as value
+      `;
+    } catch (e) {
+      console.error('analytics deliverers:', e?.message || e);
+    }
+
+    try {
+      categoryRows = await sql`
+        SELECT COALESCE(NULLIF(p.category, ''), 'Other') as name,
+               COALESCE(SUM(o.total_amount), 0) as value
         FROM orders o
-        JOIN products p ON o.item_id = p.id
+        LEFT JOIN products p ON o.item_id::text = p.id::text AND o.item_type = 'product'
         WHERE o.payment_status = 'paid'
         GROUP BY 1
         ORDER BY value DESC
         LIMIT 8
-      `,
-      // Revenue by order type
-      sql`
-        SELECT COALESCE(NULLIF(order_type, ''), COALESCE(item_type, 'other')) as name,
+      `;
+    } catch (e) {
+      console.error('analytics categories:', e?.message || e);
+    }
+
+    try {
+      typeRows = await sql`
+        SELECT COALESCE(NULLIF(item_type, ''), 'other') as name,
                COALESCE(SUM(total_amount), 0) as value
         FROM orders
         WHERE payment_status = 'paid'
         GROUP BY 1
         ORDER BY value DESC
-      `,
-      // Lifetime totals
-      sql`
+      `;
+    } catch (e) {
+      console.error('analytics types:', e?.message || e);
+    }
+
+    try {
+      const [t] = await sql`
         SELECT
           (SELECT COUNT(*) FROM auth_users) as users,
           (SELECT COUNT(*) FROM orders WHERE payment_status = 'paid') as paid_orders,
           (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE payment_status = 'paid') as gmv,
           (SELECT COALESCE(SUM(platform_fee), 0) FROM orders WHERE payment_status = 'paid') as platform_fees,
-          (SELECT COUNT(*) FROM videos WHERE status = 'active' AND deleted_at IS NULL) as videos,
-          (SELECT COUNT(*) FROM products WHERE status = 'active') as products
-      `,
-    ]);
+          (SELECT COUNT(*) FROM videos WHERE status = 'active' OR status IS NULL) as videos,
+          (SELECT COUNT(*) FROM products WHERE status = 'active' OR status IS NULL) as products
+      `;
+      if (t) totals = t;
+    } catch (e) {
+      console.error('analytics totals:', e?.message || e);
+    }
 
-    // Build a continuous 6-month axis so charts don't have gaps
     const months = [];
     const now = new Date();
     for (let i = 5; i >= 0; i--) {
@@ -108,7 +142,7 @@ export async function GET() {
 
     const byMonth = (rows, field = 'total') => {
       const map = {};
-      for (const r of rows) map[r.month] = parseFloat(r[field]) || 0;
+      for (const r of rows || []) map[r.month] = parseFloat(r[field]) || 0;
       return map;
     };
 
@@ -137,13 +171,13 @@ export async function GET() {
       deliverers: growthDeliverers[m.key] || 0,
     }));
 
-    const categoryDistribution = categoryRows.map((r) => ({
-      name: r.name,
+    const categoryDistribution = (categoryRows || []).map((r) => ({
+      name: r.name || 'Other',
       value: parseFloat(r.value) || 0,
     }));
 
-    const revenueByType = typeRows.map((r) => ({
-      name: r.name,
+    const revenueByType = (typeRows || []).map((r) => ({
+      name: r.name || 'other',
       value: parseFloat(r.value) || 0,
     }));
 
@@ -164,6 +198,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Admin analytics GET error:', error);
-    return Response.json({ error: 'Failed to load analytics' }, { status: 500 });
+    return Response.json(
+      { error: 'Failed to load analytics', details: String(error?.message || error) },
+      { status: 500 }
+    );
   }
 }
