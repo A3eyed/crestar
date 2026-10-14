@@ -3,195 +3,135 @@
 import { useState, useEffect } from 'react';
 
 const CURRENCY_SYMBOLS = {
-  AED: 'د.إ',
-  GHS: '₵',
-  NGN: '₦',
-  USD: '$',
-  GBP: '£',
-  INR: '₹',
-  CNY: '¥',
-  CAD: 'C$',
-  EUR: '€',
-  JPY: '¥',
-  ZAR: 'R',
-  KES: 'KSh',
-  AUD: 'A$',
-  BRL: 'R$',
-  MXN: 'Mex$',
-  CHF: 'CHF',
-  SEK: 'kr',
-  NOK: 'kr',
-  DKK: 'kr',
-  PLN: 'zł',
-  CZK: 'Kč',
-  HUF: 'Ft',
-  RON: 'lei',
-  TRY: '₺',
-  RUB: '₽',
-  SAR: 'SAR',
-  QAR: 'QAR',
-  KWD: 'KWD',
-  BHD: 'BHD',
-  ILS: '₪',
-  SGD: 'S$',
-  HKD: 'HK$',
-  MYR: 'RM',
-  THB: '฿',
-  IDR: 'Rp',
-  PHP: '₱',
-  VND: '₫',
-  KRW: '₩',
-  NZD: 'NZ$',
-  EGP: 'E£',
-  MAD: 'د.م.',
-  TZS: 'TSh',
-  UGX: 'USh',
-  XOF: 'CFA',
-  XAF: 'FCFA',
-  ARS: 'AR$',
-  CLP: 'CLP$',
-  COP: 'COL$',
-  PEN: 'S/',
-  OMR: 'ر.ع.',
-  BGN: 'лв',
-  UAH: '₴',
+  AED: 'د.إ', GHS: '₵', NGN: '₦', USD: '$', GBP: '£', INR: '₹', CNY: '¥', CAD: 'C$',
+  EUR: '€', JPY: '¥', ZAR: 'R', KES: 'KSh', AUD: 'A$', BRL: 'R$', MXN: 'Mex$', CHF: 'CHF',
+  SEK: 'kr', NOK: 'kr', DKK: 'kr', PLN: 'zł', CZK: 'Kč', HUF: 'Ft', RON: 'lei', TRY: '₺',
+  RUB: '₽', SAR: 'SAR', QAR: 'QAR', KWD: 'KWD', BHD: 'BHD', ILS: '₪', SGD: 'S$', HKD: 'HK$',
+  MYR: 'RM', THB: '฿', IDR: 'Rp', PHP: '₱', VND: '₫', KRW: '₩', NZD: 'NZ$', EGP: 'E£',
+  MAD: 'د.م.', TZS: 'TSh', UGX: 'USh', XOF: 'CFA', XAF: 'FCFA', ARS: 'AR$', CLP: 'CLP$',
+  COP: 'COL$', PEN: 'S/', OMR: 'ر.ع.', BGN: 'лв', UAH: '₴',
 };
 
 const WEB_TRANSLATIONS = {
   en: {
-    home: 'Home',
-    feed: 'Feed',
-    shop: 'Shop',
-    foodhub: 'FoodHub',
-    profile: 'Profile',
-    create: 'Create',
-    addToCart: 'Add to Cart',
-    shopNow: 'Shop Now',
-    bookNow: 'Book Now',
-    cart: 'Cart',
-    checkout: 'Checkout',
-    search: 'Search',
-    settings: 'Settings',
-    logout: 'Log out',
-    signOut: 'Sign out',
-    signIn: 'Sign In',
-    signUp: 'Sign Up',
-    orders: 'Orders',
-    wallet: 'Wallet',
-    loading: 'Loading...',
-    noProductsFound: 'No products found',
-    editProfile: 'Edit profile',
-    notifications: 'Notifications',
-    language: 'Language',
-    currency: 'Currency',
-    privacy: 'Privacy & safety',
-    languageHint:
-      'Your language changes instantly across the app — no reload needed.',
-    currencyHint:
-      'All prices convert to your preferred currency. Sellers keep their original currency.',
-    current: 'Current',
-    signingOut: 'Signing out…',
+    home: 'Home', feed: 'Feed', shop: 'Shop', foodhub: 'FoodHub', profile: 'Profile',
+    create: 'Create', addToCart: 'Add to Cart', shopNow: 'Shop Now', bookNow: 'Book Now',
+    cart: 'Cart', checkout: 'Checkout', search: 'Search', settings: 'Settings',
+    logout: 'Log out', signOut: 'Sign out', signIn: 'Sign In', signUp: 'Sign Up',
+    orders: 'Orders', wallet: 'Wallet', loading: 'Loading...', noProductsFound: 'No products found',
+    editProfile: 'Edit profile', notifications: 'Notifications', language: 'Language',
+    currency: 'Currency', privacy: 'Privacy & safety',
+    languageHint: 'Your language changes instantly across the app — no reload needed.',
+    currencyHint: 'All prices convert to your preferred currency. Sellers keep their original currency.',
+    current: 'Current', signingOut: 'Signing out…',
+    forYou: 'For You', live: 'LIVE', share: 'Share', retry: 'Retry',
+    loadingFeed: 'Loading your feed...', feedError: 'Could not load the feed. Please try again.',
+    noVideos: 'No videos yet. Follow creators or check back soon.', findPeople: 'Find people',
+    soldOut: 'Sold out', searchProducts: 'Search products...', searchFood: 'Search food...',
+    searchDrinks: 'Search drinks...', video: 'Video', addedToCart: 'added to cart!',
+    fashion: 'Fashion', beauty: 'Beauty', tech: 'Tech', homeCategory: 'Home',
+    food: 'Food', drinks: 'Drinks', all: 'All', nearMe: 'Near Me',
+    setLocation: 'Set your location', change: 'Change', yourLocation: 'Your Location',
+    useCurrentLocation: 'Use Current Location', detectingLocation: 'Detecting your location...',
+    autoDetectCity: 'Automatically detect your city', typeCity: 'Type your city name...',
+    noItemsFound: 'No items found', setLocationToSeeNearby: 'Set your location to see items near you',
+    region: 'Region', by: 'by', availableToCashOut: 'Available to Cash Out',
+    pendingEarnings: 'Pending Earnings', cashOut: 'Cash Out', payoutMethod: 'Payout method',
+    ordersAndPurchases: 'Orders & Purchases',
+    confirmDeliveries: 'Confirm deliveries with your PIN to release payments',
+    recentTransactions: 'Recent Transactions', noTransactions: 'No transactions yet',
+    searchCurrencies: 'Search currencies...', popular: 'Popular', africa: 'Africa',
+    americas: 'Americas', europe: 'Europe', middleEast: 'Middle East', asia: 'Asia', oceania: 'Oceania',
   },
   fr: {
-    home: 'Accueil',
-    feed: 'Fil',
-    shop: 'Boutique',
-    foodhub: 'Cuisine',
-    profile: 'Profil',
-    create: 'Créer',
-    addToCart: 'Ajouter au panier',
-    shopNow: 'Acheter maintenant',
-    bookNow: 'Réserver',
-    cart: 'Panier',
-    checkout: 'Paiement',
-    search: 'Rechercher',
-    settings: 'Paramètres',
-    logout: 'Déconnexion',
-    signOut: 'Se déconnecter',
-    signIn: 'Se connecter',
-    signUp: "S'inscrire",
-    orders: 'Commandes',
-    wallet: 'Portefeuille',
-    loading: 'Chargement...',
-    noProductsFound: 'Aucun produit trouvé',
-    editProfile: 'Modifier le profil',
-    notifications: 'Notifications',
-    language: 'Langue',
-    currency: 'Devise',
-    privacy: 'Confidentialité et sécurité',
-    languageHint:
-      'Votre langue change instantanément dans l’application — aucun rechargement.',
-    currencyHint:
-      'Tous les prix se convertissent dans votre devise. Les vendeurs gardent la leur.',
-    current: 'Actuel',
-    signingOut: 'Déconnexion…',
+    home: 'Accueil', feed: 'Fil', shop: 'Boutique', foodhub: 'Cuisine', profile: 'Profil',
+    create: 'Créer', addToCart: 'Ajouter au panier', shopNow: 'Acheter maintenant', bookNow: 'Réserver',
+    cart: 'Panier', checkout: 'Paiement', search: 'Rechercher', settings: 'Paramètres',
+    logout: 'Déconnexion', signOut: 'Se déconnecter', signIn: 'Se connecter', signUp: "S'inscrire",
+    orders: 'Commandes', wallet: 'Portefeuille', loading: 'Chargement...', noProductsFound: 'Aucun produit trouvé',
+    editProfile: 'Modifier le profil', notifications: 'Notifications', language: 'Langue',
+    currency: 'Devise', privacy: 'Confidentialité et sécurité',
+    languageHint: "Votre langue change instantanément dans l'application — aucun rechargement.",
+    currencyHint: 'Tous les prix se convertissent dans votre devise. Les vendeurs gardent la leur.',
+    current: 'Actuel', signingOut: 'Déconnexion…',
+    forYou: 'Pour toi', live: 'DIRECT', share: 'Partager', retry: 'Réessayer',
+    loadingFeed: 'Chargement du fil...', feedError: 'Impossible de charger le fil. Réessayez.',
+    noVideos: 'Pas encore de vidéos. Suivez des créateurs.', findPeople: 'Trouver des personnes',
+    soldOut: 'Épuisé', searchProducts: 'Rechercher des produits...', searchFood: 'Rechercher de la nourriture...',
+    searchDrinks: 'Rechercher des boissons...', video: 'Vidéo', addedToCart: 'ajouté au panier !',
+    fashion: 'Mode', beauty: 'Beauté', tech: 'Tech', homeCategory: 'Maison',
+    food: 'Nourriture', drinks: 'Boissons', all: 'Tout', nearMe: 'Près de moi',
+    setLocation: 'Définir votre position', change: 'Changer', yourLocation: 'Votre position',
+    useCurrentLocation: 'Utiliser la position actuelle', detectingLocation: 'Détection de la position...',
+    autoDetectCity: 'Détecter automatiquement votre ville', typeCity: 'Tapez le nom de votre ville...',
+    noItemsFound: 'Aucun article trouvé', setLocationToSeeNearby: 'Définissez votre position pour voir les articles près de vous',
+    region: 'Région', by: 'par', availableToCashOut: 'Disponible pour retrait',
+    pendingEarnings: 'Gains en attente', cashOut: 'Retirer', payoutMethod: 'Mode de paiement',
+    ordersAndPurchases: 'Commandes et achats',
+    confirmDeliveries: 'Confirmez les livraisons avec votre PIN pour libérer les paiements',
+    recentTransactions: 'Transactions récentes', noTransactions: 'Aucune transaction',
+    searchCurrencies: 'Rechercher des devises...', popular: 'Populaire', africa: 'Afrique',
+    americas: 'Amériques', europe: 'Europe', middleEast: 'Moyen-Orient', asia: 'Asie', oceania: 'Océanie',
   },
   es: {
-    home: 'Inicio',
-    feed: 'Feed',
-    shop: 'Tienda',
-    foodhub: 'Comida',
-    profile: 'Perfil',
-    create: 'Crear',
-    addToCart: 'Agregar al carrito',
-    shopNow: 'Comprar ahora',
-    bookNow: 'Reservar',
-    cart: 'Carrito',
-    checkout: 'Pagar',
-    search: 'Buscar',
-    settings: 'Ajustes',
-    logout: 'Cerrar sesión',
-    signOut: 'Cerrar sesión',
-    signIn: 'Iniciar sesión',
-    signUp: 'Registrarse',
-    orders: 'Pedidos',
-    wallet: 'Billetera',
-    loading: 'Cargando...',
-    noProductsFound: 'No se encontraron productos',
-    editProfile: 'Editar perfil',
-    notifications: 'Notificaciones',
-    language: 'Idioma',
-    currency: 'Moneda',
-    privacy: 'Privacidad y seguridad',
-    languageHint:
-      'Tu idioma cambia al instante en la app — sin recargar.',
-    currencyHint:
-      'Todos los precios se convierten a tu moneda. Los vendedores mantienen la suya.',
-    current: 'Actual',
-    signingOut: 'Cerrando sesión…',
+    home: 'Inicio', feed: 'Feed', shop: 'Tienda', foodhub: 'Comida', profile: 'Perfil',
+    create: 'Crear', addToCart: 'Agregar al carrito', shopNow: 'Comprar ahora', bookNow: 'Reservar',
+    cart: 'Carrito', checkout: 'Pagar', search: 'Buscar', settings: 'Ajustes',
+    logout: 'Cerrar sesión', signOut: 'Cerrar sesión', signIn: 'Iniciar sesión', signUp: 'Registrarse',
+    orders: 'Pedidos', wallet: 'Billetera', loading: 'Cargando...', noProductsFound: 'No se encontraron productos',
+    editProfile: 'Editar perfil', notifications: 'Notificaciones', language: 'Idioma',
+    currency: 'Moneda', privacy: 'Privacidad y seguridad',
+    languageHint: 'Tu idioma cambia al instante en la app — sin recargar.',
+    currencyHint: 'Todos los precios se convierten a tu moneda. Los vendedores mantienen la suya.',
+    current: 'Actual', signingOut: 'Cerrando sesión…',
+    forYou: 'Para ti', live: 'EN VIVO', share: 'Compartir', retry: 'Reintentar',
+    loadingFeed: 'Cargando tu feed...', feedError: 'No se pudo cargar el feed. Inténtalo de nuevo.',
+    noVideos: 'Aún no hay videos. Sigue a creadores.', findPeople: 'Buscar personas',
+    soldOut: 'Agotado', searchProducts: 'Buscar productos...', searchFood: 'Buscar comida...',
+    searchDrinks: 'Buscar bebidas...', video: 'Video', addedToCart: 'añadido al carrito!',
+    fashion: 'Moda', beauty: 'Belleza', tech: 'Tech', homeCategory: 'Hogar',
+    food: 'Comida', drinks: 'Bebidas', all: 'Todo', nearMe: 'Cerca de mí',
+    setLocation: 'Establece tu ubicación', change: 'Cambiar', yourLocation: 'Tu ubicación',
+    useCurrentLocation: 'Usar ubicación actual', detectingLocation: 'Detectando ubicación...',
+    autoDetectCity: 'Detectar tu ciudad automáticamente', typeCity: 'Escribe el nombre de tu ciudad...',
+    noItemsFound: 'No se encontraron artículos', setLocationToSeeNearby: 'Establece tu ubicación para ver artículos cerca',
+    region: 'Región', by: 'por', availableToCashOut: 'Disponible para retirar',
+    pendingEarnings: 'Ganancias pendientes', cashOut: 'Retirar', payoutMethod: 'Método de pago',
+    ordersAndPurchases: 'Pedidos y compras',
+    confirmDeliveries: 'Confirma entregas con tu PIN para liberar pagos',
+    recentTransactions: 'Transacciones recientes', noTransactions: 'Sin transacciones',
+    searchCurrencies: 'Buscar monedas...', popular: 'Popular', africa: 'África',
+    americas: 'Américas', europe: 'Europa', middleEast: 'Medio Oriente', asia: 'Asia', oceania: 'Oceanía',
   },
   ar: {
-    home: 'الرئيسية',
-    feed: 'الخلاصة',
-    shop: 'تسوق',
-    foodhub: 'طعام',
-    profile: 'الملف',
-    create: 'إنشاء',
-    addToCart: 'أضف إلى السلة',
-    shopNow: 'تسوق الآن',
-    bookNow: 'احجز الآن',
-    cart: 'السلة',
-    checkout: 'الدفع',
-    search: 'بحث',
-    settings: 'الإعدادات',
-    logout: 'تسجيل الخروج',
-    signOut: 'تسجيل الخروج',
-    signIn: 'تسجيل الدخول',
-    signUp: 'التسجيل',
-    orders: 'الطلبات',
-    wallet: 'المحفظة',
-    loading: 'جاري التحميل...',
-    noProductsFound: 'لم يتم العثور على منتجات',
-    editProfile: 'تعديل الملف',
-    notifications: 'الإشعارات',
-    language: 'اللغة',
-    currency: 'العملة',
-    privacy: 'الخصوصية والأمان',
+    home: 'الرئيسية', feed: 'الخلاصة', shop: 'تسوق', foodhub: 'طعام', profile: 'الملف',
+    create: 'إنشاء', addToCart: 'أضف إلى السلة', shopNow: 'تسوق الآن', bookNow: 'احجز الآن',
+    cart: 'السلة', checkout: 'الدفع', search: 'بحث', settings: 'الإعدادات',
+    logout: 'تسجيل الخروج', signOut: 'تسجيل الخروج', signIn: 'تسجيل الدخول', signUp: 'التسجيل',
+    orders: 'الطلبات', wallet: 'المحفظة', loading: 'جاري التحميل...', noProductsFound: 'لم يتم العثور على منتجات',
+    editProfile: 'تعديل الملف', notifications: 'الإشعارات', language: 'اللغة',
+    currency: 'العملة', privacy: 'الخصوصية والأمان',
     languageHint: 'تتغير اللغة فوراً في التطبيق — دون إعادة تحميل.',
-    currencyHint:
-      'تُحوَّل كل الأسعار إلى عملتك المفضلة. يحتفظ البائعون بعملتهم.',
-    current: 'الحالي',
-    signingOut: 'جاري تسجيل الخروج…',
+    currencyHint: 'تُحوَّل كل الأسعار إلى عملتك المفضلة. يحتفظ البائعون بعملتهم.',
+    current: 'الحالي', signingOut: 'جاري تسجيل الخروج…',
+    forYou: 'لك', live: 'مباشر', share: 'مشاركة', retry: 'إعادة المحاولة',
+    loadingFeed: 'جاري تحميل الخلاصة...', feedError: 'تعذر تحميل الخلاصة. حاول مرة أخرى.',
+    noVideos: 'لا توجد فيديوهات بعد. تابع المبدعين.', findPeople: 'ابحث عن أشخاص',
+    soldOut: 'نفد', searchProducts: 'ابحث عن منتجات...', searchFood: 'ابحث عن طعام...',
+    searchDrinks: 'ابحث عن مشروبات...', video: 'فيديو', addedToCart: 'أُضيف إلى السلة!',
+    fashion: 'أزياء', beauty: 'جمال', tech: 'تقنية', homeCategory: 'منزل',
+    food: 'طعام', drinks: 'مشروبات', all: 'الكل', nearMe: 'بالقرب مني',
+    setLocation: 'حدد موقعك', change: 'تغيير', yourLocation: 'موقعك',
+    useCurrentLocation: 'استخدم الموقع الحالي', detectingLocation: 'جاري تحديد الموقع...',
+    autoDetectCity: 'اكتشف مدينتك تلقائياً', typeCity: 'اكتب اسم مدينتك...',
+    noItemsFound: 'لم يتم العثور على عناصر', setLocationToSeeNearby: 'حدد موقعك لرؤية العناصر القريبة',
+    region: 'المنطقة', by: 'بواسطة', availableToCashOut: 'متاح للسحب',
+    pendingEarnings: 'أرباح معلقة', cashOut: 'سحب', payoutMethod: 'طريقة الدفع',
+    ordersAndPurchases: 'الطلبات والمشتريات',
+    confirmDeliveries: 'أكد التسليم برمز PIN لتحرير المدفوعات',
+    recentTransactions: 'المعاملات الأخيرة', noTransactions: 'لا توجد معاملات',
+    searchCurrencies: 'ابحث عن عملات...', popular: 'شائع', africa: 'أفريقيا',
+    americas: 'الأمريكتان', europe: 'أوروبا', middleEast: 'الشرق الأوسط', asia: 'آسيا', oceania: 'أوقيانوسيا',
   },
 };
 
@@ -206,9 +146,7 @@ function applyDocumentLanguage(lang) {
   try {
     document.documentElement.lang = lang || 'en';
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-  } catch (_e) {
-    /* ignore */
-  }
+  } catch (_e) {}
 }
 
 export function useLocalization() {
@@ -225,21 +163,15 @@ export function useLocalization() {
             setCurrencyState(savedCurrency);
             setCurrencySymbol(CURRENCY_SYMBOLS[savedCurrency] || savedCurrency);
           }
-
           const savedLang = localStorage.getItem('language') || 'en';
           setLanguageState(savedLang);
           applyDocumentLanguage(savedLang);
-        } catch (e) {
-          // use defaults
-        }
+        } catch (e) {}
       };
-
       syncFromStorage();
-
       window.addEventListener('currency-changed', syncFromStorage);
       window.addEventListener('language-changed', syncFromStorage);
       window.addEventListener('storage', syncFromStorage);
-
       return () => {
         window.removeEventListener('currency-changed', syncFromStorage);
         window.removeEventListener('language-changed', syncFromStorage);
@@ -249,29 +181,17 @@ export function useLocalization() {
   }, []);
 
   const setLanguage = (lang) => {
-    try {
-      localStorage.setItem('language', lang);
-    } catch (e) {
-      /* storage unavailable */
-    }
+    try { localStorage.setItem('language', lang); } catch (e) {}
     setLanguageState(lang);
     applyDocumentLanguage(lang);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('language-changed'));
-    }
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('language-changed'));
   };
 
   const setCurrency = (code) => {
-    try {
-      localStorage.setItem('currency', code);
-    } catch (e) {
-      /* storage unavailable */
-    }
+    try { localStorage.setItem('currency', code); } catch (e) {}
     setCurrencyState(code);
     setCurrencySymbol(CURRENCY_SYMBOLS[code] || code);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('currency-changed'));
-    }
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('currency-changed'));
   };
 
   const formatCurrency = (amount, overrideCurrency) => {
@@ -281,10 +201,7 @@ export function useLocalization() {
     const noDecimalCurrencies = ['JPY', 'KRW', 'VND', 'CLP', 'UGX', 'RWF', 'XOF', 'XAF', 'IDR'];
     const formatted = noDecimalCurrencies.includes(code)
       ? Math.round(num).toLocaleString()
-      : num.toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
+      : num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return `${symbol}${formatted}`;
   };
 
@@ -300,16 +217,7 @@ export function useLocalization() {
     return text;
   };
 
-  return {
-    formatCurrency,
-    formatDate,
-    t,
-    currency,
-    currencySymbol,
-    language,
-    setLanguage,
-    setCurrency,
-  };
+  return { formatCurrency, formatDate, t, currency, currencySymbol, language, setLanguage, setCurrency };
 }
 
 export default useLocalization;
