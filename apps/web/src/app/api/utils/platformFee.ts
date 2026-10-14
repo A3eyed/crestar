@@ -13,8 +13,8 @@
  *   • Deliverers (delivery fees)
  *
  * There are no tiered rates, no per-category rates, no "creator sale" rate and
- * no registered-business discount. There are no subscriptions. If you find
- * another fee anywhere, it is a bug — delete it and use this module instead.
+ * no registered-business discount. If you find another fee anywhere, it is a
+ * bug — delete it and use this module instead.
  *
  * The database is the final authority: `orders.platform_fee_rate` defaults to
  * 0.0500 and the `crestar_apply_platform_fee` BEFORE INSERT/UPDATE trigger nets
