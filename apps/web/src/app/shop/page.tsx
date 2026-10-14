@@ -3,29 +3,11 @@
 import { useState, useEffect } from "react";
 import CurrencyPrice from "@/components/CurrencyPrice";
 import useUser from "@/utils/useUser";
-import {
-  Search,
-  Filter,
-  ShoppingCart,
-  Star,
-  Play,
-  Home,
-  ShoppingBag,
-  Truck,
-  User,
-  Plus,
-} from "lucide-react";
+import useLocalization from "@/utils/useLocalization";
+import BottomNav from "@/components/BottomNav";
+import { Search, Filter, ShoppingCart, Star, Play } from "lucide-react";
 
-const CATEGORIES = [
-  { id: "all", label: "For You", icon: "✨" },
-  { id: "fashion", label: "Fashion", icon: "👗" },
-  { id: "beauty", label: "Beauty", icon: "💄" },
-  { id: "tech", label: "Tech", icon: "📱" },
-  { id: "home", label: "Home", icon: "🏠" },
-  { id: "food", label: "Food", icon: "🍕" },
-];
-
-function ProductCard({ product, onPress, onAddToCart }) {
+function ProductCard({ product, onPress, onAddToCart, t }) {
   return (
     <div onClick={onPress} className="cursor-pointer group">
       <div className="relative mb-3 overflow-hidden rounded-xl">
@@ -34,54 +16,36 @@ function ProductCard({ product, onPress, onAddToCart }) {
           alt={product.name}
           className="w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-300"
         />
-
         {product.hasVideo && (
           <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm px-2 py-1 rounded-md flex items-center gap-1">
             <Play size={12} className="text-white fill-white" />
-            <span className="text-white text-[10px] font-semibold">Video</span>
+            <span className="text-white text-[10px] font-semibold">{t("video")}</span>
           </div>
         )}
-
         {product.discount && (
           <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded-md">
-            <span className="text-black text-xs font-bold">
-              -{product.discount}%
-            </span>
+            <span className="text-black text-xs font-bold">-{product.discount}%</span>
           </div>
         )}
-
         {product.tags && product.tags.length > 0 && (
           <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm px-2 py-1 rounded-md">
-            <span className="text-white text-[10px] font-semibold">
-              {product.tags[0]}
-            </span>
+            <span className="text-white text-[10px] font-semibold">{product.tags[0]}</span>
           </div>
         )}
       </div>
-
-      <h3 className="text-white text-sm font-semibold mb-2 line-clamp-2">
-        {product.name}
-      </h3>
-
+      <h3 className="text-white text-sm font-semibold mb-2 line-clamp-2">{product.name}</h3>
       <div className="flex items-center gap-1 mb-2">
         <Star size={12} className="text-[#FFD700] fill-[#FFD700]" />
-        <span className="text-[#FFD700] text-xs font-semibold">
-          {product.rating}
-        </span>
+        <span className="text-[#FFD700] text-xs font-semibold">{product.rating}</span>
         <span className="text-white/50 text-[11px]">({product.reviews})</span>
       </div>
-
       <div className="flex items-center gap-2 mb-3">
         <CurrencyPrice
           price={product.price}
           originalCurrency={product.seller_currency || "GHS"}
           showOriginal={false}
           size="medium"
-          textStyle={{
-            color: "#FFFFFF",
-            fontSize: "1.125rem",
-            fontWeight: "bold",
-          }}
+          textStyle={{ color: "#FFFFFF", fontSize: "1.125rem", fontWeight: "bold" }}
         />
         {product.originalPrice && (
           <CurrencyPrice
@@ -89,15 +53,10 @@ function ProductCard({ product, onPress, onAddToCart }) {
             originalCurrency={product.seller_currency || "GHS"}
             showOriginal={false}
             size="small"
-            textStyle={{
-              color: "rgba(255,255,255,0.5)",
-              fontSize: "0.875rem",
-              textDecoration: "line-through",
-            }}
+            textStyle={{ color: "rgba(255,255,255,0.5)", fontSize: "0.875rem", textDecoration: "line-through" }}
           />
         )}
       </div>
-
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -105,7 +64,7 @@ function ProductCard({ product, onPress, onAddToCart }) {
         }}
         className="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg py-2 hover:bg-white/20 transition-colors"
       >
-        <span className="text-white text-sm font-bold">Add to Cart</span>
+        <span className="text-white text-sm font-bold">{t("addToCart")}</span>
       </button>
     </div>
   );
@@ -113,11 +72,21 @@ function ProductCard({ product, onPress, onAddToCart }) {
 
 export default function ShopPage() {
   const { data: user } = useUser();
+  const { t } = useLocalization();
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cartCount, setCartCount] = useState(0);
+
+  const CATEGORIES = [
+    { id: "all", label: t("forYou"), icon: "✨" },
+    { id: "fashion", label: t("fashion"), icon: "👗" },
+    { id: "beauty", label: t("beauty"), icon: "💄" },
+    { id: "tech", label: t("tech"), icon: "📱" },
+    { id: "home", label: t("homeCategory"), icon: "🏠" },
+    { id: "food", label: t("food"), icon: "🍕" },
+  ];
 
   useEffect(() => {
     fetchProducts();
@@ -127,7 +96,6 @@ export default function ShopPage() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      // Filter to only show physical_goods products (exclude food_beverage)
       const res = await fetch(
         "/api/listings/products?status=active&productType=physical_goods&limit=50",
       );
@@ -154,6 +122,7 @@ export default function ShopPage() {
             hasVideo: false,
             tags: p.is_todays_special ? ["Today's Special"] : [],
             category: (p.category || "all").toLowerCase(),
+            seller_currency: p.seller_currency || "GHS",
           };
         });
         setProducts(transformed);
@@ -189,7 +158,7 @@ export default function ShopPage() {
       }
       localStorage.setItem("cart", JSON.stringify(cart));
       loadCartCount();
-      alert(`${product.name} added to cart!`);
+      alert(`${product.name} ${t("addedToCart")}`);
     } catch (err) {
       console.error("Failed to add to cart:", err);
     }
@@ -205,29 +174,23 @@ export default function ShopPage() {
   });
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Header */}
+    <div className="min-h-screen bg-black text-white pb-24">
       <div className="sticky top-0 z-20 bg-black border-b border-white/10 backdrop-blur-xl bg-opacity-95">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 relative">
-              <Search
-                size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50"
-              />
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50" />
               <input
                 type="text"
-                placeholder="Search products..."
+                placeholder={t("searchProducts")}
                 className="w-full bg-white/10 border border-white/20 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-
             <button className="w-11 h-11 bg-white/10 border border-white/20 rounded-xl flex items-center justify-center hover:bg-white/20 transition-colors">
               <Filter size={20} className="text-white" />
             </button>
-
             <a
               href="/cart"
               className="w-11 h-11 bg-white/10 border border-white/20 rounded-xl flex items-center justify-center hover:bg-white/20 transition-colors relative"
@@ -240,7 +203,6 @@ export default function ShopPage() {
               )}
             </a>
           </div>
-
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
             {CATEGORIES.map((cat) => (
               <button
@@ -253,9 +215,7 @@ export default function ShopPage() {
                 }`}
               >
                 <span>{cat.icon}</span>
-                <span
-                  className={`text-sm ${selectedCategory === cat.id ? "font-bold" : "font-medium"}`}
-                >
+                <span className={`text-sm ${selectedCategory === cat.id ? "font-bold" : "font-medium"}`}>
                   {cat.label}
                 </span>
               </button>
@@ -264,25 +224,14 @@ export default function ShopPage() {
         </div>
       </div>
 
-      {/* Products Grid */}
       <div className="max-w-7xl mx-auto px-4 py-6 pb-24">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="w-12 h-12 border-3 border-white/30 border-t-white rounded-full"></div>
-            <style jsx>{`
-              @keyframes spin {
-                to {
-                  transform: rotate(360deg);
-                }
-              }
-              div > div {
-                animation: spin 1s linear infinite;
-              }
-            `}</style>
+            <div className="w-12 h-12 border-3 border-white/30 border-t-white rounded-full animate-spin" />
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="text-center py-20">
-            <p className="text-white/50 text-lg">No products found</p>
+            <p className="text-white/50 text-lg">{t("noProductsFound")}</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -290,64 +239,15 @@ export default function ShopPage() {
               <ProductCard
                 key={product.id}
                 product={product}
-                onPress={() =>
-                  (window.location.href = `/product/${product.id}`)
-                }
+                t={t}
+                onPress={() => (window.location.href = `/product/${product.id}`)}
                 onAddToCart={handleAddToCart}
               />
             ))}
           </div>
         )}
       </div>
-
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-black border-t border-white/10 backdrop-blur-xl bg-opacity-95">
-        <div className="max-w-2xl mx-auto px-4 py-2 flex items-center justify-around relative">
-          <a href="/" className="flex flex-col items-center gap-1 py-2">
-            <Home size={26} className="text-white/60" />
-            <span className="text-xs font-semibold text-white/60">Home</span>
-          </a>
-          <a href="/shop" className="flex flex-col items-center gap-1 py-2">
-            <ShoppingBag size={26} className="text-white" />
-            <span className="text-xs font-semibold text-white">Shop</span>
-          </a>
-
-          {/* Circular Create Button */}
-          <a href="/create" className="flex flex-col items-center">
-            <div className="relative -mt-6">
-              <div className="w-16 h-16 rounded-full bg-[#D4AF37] flex items-center justify-center shadow-lg border-4 border-black">
-                <Plus size={32} color="white" strokeWidth={3} />
-              </div>
-            </div>
-          </a>
-
-          <a href="/foodhub" className="flex flex-col items-center gap-1 py-2">
-            <Truck size={26} className="text-white/60" />
-            <span className="text-xs font-semibold text-white/60">FoodHub</span>
-          </a>
-          {user ? (
-            <a
-              href="/profile"
-              className="flex flex-col items-center gap-1 py-2"
-            >
-              <User size={26} className="text-white/60" />
-              <span className="text-xs font-semibold text-white/60">
-                Profile
-              </span>
-            </a>
-          ) : (
-            <a
-              href="/account/signin"
-              className="flex flex-col items-center gap-1 py-2"
-            >
-              <User size={26} className="text-white/60" />
-              <span className="text-xs font-semibold text-white/60">
-                Sign In
-              </span>
-            </a>
-          )}
-        </div>
-      </div>
+      <BottomNav />
     </div>
   );
 }
