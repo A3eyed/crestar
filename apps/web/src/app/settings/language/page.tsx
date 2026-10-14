@@ -36,15 +36,15 @@ export default function LanguageSettingsPage() {
           >
             <ArrowLeft size={20} className="text-white" />
           </a>
-          <h1 className="text-xl font-bold">Language</h1>
+          <h1 className="text-xl font-bold">{t('language')}</h1>
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-xl p-4 mb-6">
           <p className="text-white/90 text-sm leading-relaxed">
-            🌍 Your language changes instantly across the app — no reload needed. Current:{' '}
-            <strong>{t('settings')}</strong>
+            🌍 {t('languageHint')} {t('current')}:{' '}
+            <strong>{LANGUAGES.find((l) => l.code === selected)?.nativeName || selected}</strong>
           </p>
         </div>
 
