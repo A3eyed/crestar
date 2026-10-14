@@ -9,38 +9,104 @@ const SITE_URL = 'https://crestarhq.com';
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Crestar — Shop, Create, Earn Together | Social Commerce',
+    default:
+      'Crestar — Online Shopping in Ghana & Africa | Buy, Sell & Shop Online',
     template: '%s | Crestar',
   },
   description:
-    'Crestar (crestarhq.com) is the social commerce platform for Ghana and Africa. Buy and sell products through short videos and live shopping, connect with verified sellers, order food, pay with mobile money, and earn from your content with affiliate commissions.',
+    'Crestar is an online shopping and social commerce platform for Ghana and Africa. Shop online, buy and sell products, live shopping, video commerce, food delivery, and mobile money payments. Founded by Abdallah Fuseini. Discover Crestar HQ (crestarhq.com) — the marketplace to buy online and sell online across Africa.',
   keywords: [
+    // Brand
     'Crestar',
     'Crestar HQ',
     'crestarhq',
     'crestarhq.com',
     'Crestar Ghana',
+    'Crestar Africa',
     'Crestar app',
     'Crestar marketplace',
+    'Crestar shopping',
+    'Crestar online shopping',
     'Crestar social commerce',
+    // Founder
+    'Abdallah Fuseini',
+    'Abdallah Fuseini Crestar',
+    'Crestar founder',
+    // Core shopping intent
+    'shopping',
+    'shop online',
+    'online shopping',
+    'buy online',
+    'sell online',
+    'online store',
+    'online marketplace',
+    'ecommerce',
+    'e-commerce',
+    'online shop',
+    'digital marketplace',
+    'marketplace app',
+    // Ghana / Africa
+    'shopping Ghana',
+    'online shopping Ghana',
+    'shop online Ghana',
+    'buy online Ghana',
+    'sell online Ghana',
+    'Ghana marketplace',
+    'Ghana online store',
+    'Ghana ecommerce',
+    'Africa shopping',
+    'online shopping Africa',
+    'shop online Africa',
+    'buy online Africa',
+    'sell online Africa',
+    'Africa marketplace',
+    'African ecommerce',
+    'West Africa shopping',
+    'Accra online shopping',
+    // Platform types searchers use
+    'shopping platforms',
+    'Ghana shopping platforms',
+    'Africa shopping platforms',
+    'online shopping platforms',
+    'best online shopping Ghana',
+    'best marketplace Ghana',
+    'shopping apps Ghana',
+    'shopping apps Africa',
+    // Social / live commerce
+    'social commerce',
     'social commerce Ghana',
     'social commerce Africa',
+    'live shopping',
     'live shopping Ghana',
     'video shopping',
-    'sell online Ghana',
-    'buy online Ghana',
-    'online marketplace Ghana',
+    'shop through video',
+    'live commerce',
+    'live selling',
+    // Payments & local
     'mobile money shopping',
     'MoMo shopping',
+    'pay with mobile money',
+    'MTN MoMo shopping',
+    // Categories people shop for
     'food delivery Ghana',
+    'buy food online Ghana',
+    'fashion online Ghana',
+    'electronics online Ghana',
+    'products for sale Ghana',
+    // Creator / seller side
+    'sell products online',
+    'start selling online Ghana',
     'creator earnings',
     'affiliate commission',
-    'live commerce',
-    'shop through video',
+    'earn from content',
+    'become a seller',
   ],
   applicationName: 'Crestar',
-  authors: [{ name: 'Crestar', url: SITE_URL }],
-  creator: 'Crestar',
+  authors: [
+    { name: 'Crestar', url: SITE_URL },
+    { name: 'Abdallah Fuseini' },
+  ],
+  creator: 'Abdallah Fuseini',
   publisher: 'Crestar',
   category: 'shopping',
   icons: {
@@ -54,9 +120,9 @@ export const metadata = {
   openGraph: {
     type: 'website',
     siteName: 'Crestar',
-    title: 'Crestar — Shop, Create, Earn Together',
+    title: 'Crestar — Online Shopping in Ghana & Africa | Buy & Sell Online',
     description:
-      'Crestar is social commerce for Ghana and Africa. Buy and sell through live video, connect with verified sellers, and earn from your content.',
+      'Shop online on Crestar — Ghana and Africa’s social commerce marketplace. Buy online, sell online, live shopping, and mobile money. Built by Abdallah Fuseini.',
     url: SITE_URL,
     locale: 'en_GH',
     images: [
@@ -64,15 +130,15 @@ export const metadata = {
         url: '/logo.png',
         width: 1024,
         height: 1024,
-        alt: 'Crestar — Shop, Create, Earn Together',
+        alt: 'Crestar — Shop online in Ghana and Africa',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Crestar — Shop, Create, Earn Together',
+    title: 'Crestar — Online Shopping in Ghana & Africa',
     description:
-      'Buy and sell through live video, connect with sellers, and earn from your content on Crestar.',
+      'Buy online, sell online, and shop through live video on Crestar. The shopping platform for Ghana and Africa.',
     images: ['/logo.png'],
   },
   robots: {
@@ -90,7 +156,7 @@ export const metadata = {
     canonical: SITE_URL,
   },
   verification: {
-    // Add Google Search Console verification token here when available:
+    // Add Google Search Console token when available:
     // google: 'your-google-site-verification-token',
   },
 };
@@ -102,14 +168,26 @@ const structuredData = {
       '@type': 'Organization',
       '@id': `${SITE_URL}/#organization`,
       name: 'Crestar',
-      alternateName: ['Crestar HQ', 'crestarhq'],
+      alternateName: ['Crestar HQ', 'crestarhq', 'Crestar Ghana'],
       url: SITE_URL,
       logo: {
         '@type': 'ImageObject',
         url: `${SITE_URL}/logo.png`,
       },
       description:
-        'Crestar is the social commerce platform built for Ghana and Africa — buy and sell through short videos and live shopping, order food, pay with mobile money, and earn from your content.',
+        'Crestar is an online shopping and social commerce platform for Ghana and Africa. Buy online, sell online, live shopping, video commerce, and mobile money payments.',
+      founder: {
+        '@type': 'Person',
+        name: 'Abdallah Fuseini',
+      },
+      foundingLocation: {
+        '@type': 'Place',
+        name: 'Ghana',
+      },
+      areaServed: [
+        { '@type': 'Country', name: 'Ghana' },
+        { '@type': 'Continent', name: 'Africa' },
+      ],
       sameAs: [],
       contactPoint: {
         '@type': 'ContactPoint',
@@ -121,7 +199,11 @@ const structuredData = {
       '@type': 'WebSite',
       '@id': `${SITE_URL}/#website`,
       name: 'Crestar',
-      alternateName: 'Crestar — Shop, Create, Earn Together',
+      alternateName: [
+        'Crestar — Online Shopping Ghana',
+        'Crestar Marketplace',
+        'Crestar HQ',
+      ],
       url: SITE_URL,
       publisher: { '@id': `${SITE_URL}/#organization` },
       inLanguage: 'en-GH',
@@ -146,7 +228,15 @@ const structuredData = {
         priceCurrency: 'GHS',
       },
       description:
-        'Social commerce app to shop through video, sell products, go live, and earn affiliate commissions in Ghana and across Africa.',
+        'Online shopping app for Ghana and Africa. Buy online, sell online, live shopping, and earn with affiliate commissions on Crestar.',
+    },
+    {
+      '@type': 'Person',
+      name: 'Abdallah Fuseini',
+      jobTitle: 'Founder',
+      worksFor: { '@id': `${SITE_URL}/#organization` },
+      description:
+        'Abdallah Fuseini is the founder of Crestar, the social commerce and online shopping platform for Ghana and Africa.',
     },
   ],
 };
