@@ -1,15 +1,14 @@
 // @ts-nocheck
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import useUser from "@/utils/useUser";
 import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, AreaChart, Area,
 } from "recharts";
 
 const GOLD = "#D4AF37";
-const PIE_COLORS = ["#D4AF37", "#1F2937", "#6B7280", "#9CA3AF", "#B45309", "#78350F", "#D1D5DB", "#374151"];
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -29,6 +28,13 @@ async function adminFetch(url, options = {}) {
 
 export default function AdminDashboardPage() {
   const { data: user, loading } = useUser();
+  // Stabilize identity — useUser returns a new object every render
+  const userId = user?.id ?? null;
+  const isAdmin = !!(
+    user &&
+    (["admin", "owner", "moderator"].includes(user.role) || user.is_admin === true)
+  );
+
   const [activeTab, setActiveTab] = useState("overview");
   const [stats, setStats] = useState({ sellers: {}, deliverers: {}, centers: {}, reports: {} });
   const [sellers, setSellers] = useState([]);
@@ -40,8 +46,9 @@ export default function AdminDashboardPage() {
   const [error, setError] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const isAdmin =
-    user && (["admin", "owner", "moderator"].includes(user.role) || user.is_admin === true);
+
+  // Guard against StrictMode double-mount and identity churn
+  const bootstrappedFor = useRef(null);
 
   const loadAllStats = useCallback(async () => {
     try {
@@ -59,7 +66,9 @@ export default function AdminDashboardPage() {
         sellers: sellersData.stats || { pending: sellersData.sellers?.length || 0 },
         deliverers: deliverersData.stats || { pending: deliverersData.deliverers?.length || 0 },
         centers: centersData.stats || { pending: centersData.centers?.length || 0 },
-        reports: reportsData.stats || { pending: reportsData.reports?.length || reportsData.stats?.unread || 0 },
+        reports: reportsData.stats || {
+          pending: reportsData.reports?.length || reportsData.stats?.unread || 0,
+        },
       });
     } catch (err) {
       setError("Could not load dashboard stats");
@@ -68,12 +77,15 @@ export default function AdminDashboardPage() {
 
   const loadAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
+    setError(null);
     try {
       const res = await adminFetch("/api/admin/analytics");
-      if (!res.ok) throw new Error("analytics failed");
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || "analytics failed");
+      }
       const data = await res.json();
       setAnalytics({
-        ...data,
         categoryDistribution: data.categoryDistribution || [],
         revenueByType: data.revenueByType || [],
         platformRevenue: data.platformRevenue || [],
@@ -82,7 +94,16 @@ export default function AdminDashboardPage() {
         totals: data.totals || {},
       });
     } catch (err) {
-      setError("Could not load platform analytics");
+      console.error(err);
+      setError(err.message || "Could not load platform analytics");
+      setAnalytics({
+        categoryDistribution: [],
+        revenueByType: [],
+        platformRevenue: [],
+        orderVolume: [],
+        userGrowth: [],
+        totals: {},
+      });
     } finally {
       setAnalyticsLoading(false);
     }
@@ -108,13 +129,19 @@ export default function AdminDashboardPage() {
     }
   }, []);
 
+  // Bootstrap once per user id — NOT on every user object identity change
   useEffect(() => {
-    if (user && isAdmin) { loadAllStats(); loadAnalytics(); }
-  }, [user, isAdmin, loadAllStats, loadAnalytics]);
+    if (!userId || !isAdmin) return;
+    if (bootstrappedFor.current === userId) return;
+    bootstrappedFor.current = userId;
+    loadAllStats();
+    loadAnalytics();
+  }, [userId, isAdmin, loadAllStats, loadAnalytics]);
 
   useEffect(() => {
-    if (user && isAdmin && activeTab !== "overview") loadTabData(activeTab);
-  }, [activeTab, user, isAdmin, loadTabData]);
+    if (!userId || !isAdmin || activeTab === "overview") return;
+    loadTabData(activeTab);
+  }, [activeTab, userId, isAdmin, loadTabData]);
 
   const runAction = async (key, url, body, clear) => {
     setActionBusy(key);
@@ -203,8 +230,8 @@ export default function AdminDashboardPage() {
           <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <StatCard label="Total Users" value={analytics?.totals?.users ?? "—"} />
-              <StatCard label="GMV (GHS)" value={analytics ? `₵${Number(analytics.totals.gmv || 0).toLocaleString()}` : "—"} />
-              <StatCard label="5% fees kept" value={analytics ? `₵${Number(analytics.totals.platformFees || 0).toLocaleString()}` : "—"} />
+              <StatCard label="GMV (GHS)" value={analytics?.totals ? `₵${Number(analytics.totals.gmv || 0).toLocaleString()}` : "—"} />
+              <StatCard label="5% fees kept" value={analytics?.totals ? `₵${Number(analytics.totals.platformFees || 0).toLocaleString()}` : "—"} />
               <StatCard label="Paid Orders" value={analytics?.totals?.paidOrders ?? "—"} />
               <StatCard label="Active Products" value={analytics?.totals?.products ?? "—"} />
               <StatCard label="Active Videos" value={analytics?.totals?.videos ?? "—"} />
@@ -218,7 +245,7 @@ export default function AdminDashboardPage() {
             {analyticsLoading && (
               <div className="bg-white rounded-2xl shadow p-8 text-center text-gray-500">Loading platform analytics...</div>
             )}
-            {analytics && (
+            {!analyticsLoading && analytics && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <ChartCard title="Revenue, last 6 months">
                   <ResponsiveContainer width="100%" height={260}>
@@ -331,9 +358,6 @@ function ChartCard({ title, children }) {
       {children}
     </div>
   );
-}
-function EmptyChart({ message }) {
-  return <div className="h-[220px] flex items-center justify-center text-sm text-gray-400">{message}</div>;
 }
 function ApprovalList({ title, loading, items, emptyMessage, renderItem }) {
   return (
