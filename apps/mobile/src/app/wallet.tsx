@@ -176,8 +176,8 @@ export default function CrestarEarningsWalletScreen() {
               lineHeight: 18,
             }}
           >
-            Crestar keeps 3% of each sale. Your wallet is credited with the
-            other 97%.
+            Crestar keeps 5% of each sale. ented with the
+            other 95%.
           </Text>
         </View>
 
@@ -342,7 +342,7 @@ export default function CrestarEarningsWalletScreen() {
               }}
             >
               {formatCurrency(pendingBalance)} is from paid orders that have not
-              been delivered. The 3% fee is already removed. It becomes
+              been delivered. The 5% fee is already removed. It becomes
               available only after the buyer confirms delivery with the PIN.
             </Text>
           </View>
