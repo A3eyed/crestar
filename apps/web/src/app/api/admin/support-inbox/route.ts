@@ -25,10 +25,26 @@ async function requireAdmin() {
   const session = await auth();
   if (!session?.user?.id) return null;
   const [admin] = await sql`
-    SELECT id, role FROM auth_users
-    WHERE id = ${session.user.id} AND role IN ('admin', 'owner', 'moderator')
+    SELECT id, role, is_admin FROM auth_users
+    WHERE id = ${String(session.user.id)}
+      AND (
+        is_admin = true
+        OR role IN ('admin', 'owner', 'moderator')
+      )
   `;
   return admin || null;
+}
+
+async function adminReceiverIds() {
+  const rows = await sql`
+    SELECT id::text AS id FROM auth_users
+    WHERE is_admin = true OR role IN ('admin', 'owner', 'moderator')
+       OR lower(username) IN ('support', 'crestar', 'abdallah')
+  `;
+  const ids = rows.map((r) => r.id);
+  // legacy literal targets used by older clients
+  ids.push('admin', 'Crestar', 'Support', 'support');
+  return [...new Set(ids)];
 }
 
 export async function GET(request) {
@@ -45,17 +61,18 @@ export async function GET(request) {
       100
     );
 
-    const messages = await sql(
-      `SELECT m.id, m.sender_user_id, m.receiver_user_id, m.message_text, m.is_read, m.created_at,
-              u.username AS sender_username, u.email AS sender_email, u.name AS sender_name
-       FROM messages m
-       LEFT JOIN auth_users u ON m.sender_user_id = u.id::text
-       WHERE m.receiver_user_id IN ('admin', 'Crestar')
-         AND ($1::text = 'all' OR m.is_read = false)
-       ORDER BY m.created_at DESC
-       LIMIT $2`,
-      [status, limit]
-    );
+    const receivers = await adminReceiverIds();
+
+    const messages = await sql`
+      SELECT m.id, m.sender_user_id, m.receiver_user_id, m.message_text, m.is_read, m.created_at,
+             u.username AS sender_username, u.email AS sender_email, u.name AS sender_name
+      FROM messages m
+      LEFT JOIN auth_users u ON m.sender_user_id = u.id::text
+      WHERE m.receiver_user_id = ANY(${receivers})
+        AND (${status} = 'all' OR m.is_read = false)
+      ORDER BY m.created_at DESC
+      LIMIT ${limit}
+    `;
 
     const processed = messages
       .map((msg) => ({ ...msg, ...classify(msg.message_text) }))
@@ -66,7 +83,7 @@ export async function GET(request) {
              COUNT(*) FILTER (WHERE is_read = false) AS unread_count,
              COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') AS recent_count
       FROM messages
-      WHERE receiver_user_id IN ('admin', 'Crestar')
+      WHERE receiver_user_id = ANY(${receivers})
     `;
 
     return Response.json({
@@ -110,7 +127,7 @@ export async function POST(request) {
         );
       await sql`
         INSERT INTO messages (conversation_id, sender_user_id, receiver_user_id, message_text, is_read, created_at)
-        VALUES (${"admin_support_" + original.sender_user_id}, 'admin', ${
+        VALUES (${"admin_support_" + original.sender_user_id}, ${String(admin.id)}, ${
         original.sender_user_id
       }, ${replyText}, false, NOW())
       `;
