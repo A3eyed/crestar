@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import useUser from "@/utils/useUser";
+import useLocalization from "@/utils/useLocalization";
 import CurrencyPrice from "@/components/CurrencyPrice";
 import BottomNav from "@/components/BottomNav";
 import {
@@ -14,24 +15,28 @@ import {
   LocateFixed,
 } from "lucide-react";
 
-const FOOD_CATEGORIES = [
-  { id: "all", label: "All", icon: "🍽️" },
-  { id: "local", label: "Near Me", icon: "📍" },
-  { id: "african", label: "African", icon: "🍲" },
-  { id: "chinese", label: "Chinese", icon: "🥡" },
-  { id: "pizza", label: "Pizza", icon: "🍕" },
-  { id: "burgers", label: "Burgers", icon: "🍔" },
-  { id: "healthy", label: "Healthy", icon: "🥗" },
-];
+function foodCategories(t) {
+  return [
+    { id: "all", label: t("all"), icon: "🍽️" },
+    { id: "local", label: t("nearMe"), icon: "📍" },
+    { id: "african", label: t("african"), icon: "🍲" },
+    { id: "chinese", label: t("chinese"), icon: "🥡" },
+    { id: "pizza", label: t("pizza"), icon: "🍕" },
+    { id: "burgers", label: t("burgers"), icon: "🍔" },
+    { id: "healthy", label: t("healthy"), icon: "🥗" },
+  ];
+}
 
-const DRINK_CATEGORIES = [
-  { id: "all", label: "All Drinks", icon: "🥤" },
-  { id: "local", label: "Near Me", icon: "📍" },
-  { id: "coffee", label: "Coffee", icon: "☕" },
-  { id: "juice", label: "Juice", icon: "🧃" },
-  { id: "smoothie", label: "Smoothie", icon: "🥤" },
-  { id: "tea", label: "Tea", icon: "🍵" },
-];
+function drinkCategories(t) {
+  return [
+    { id: "all", label: t("allDrinks"), icon: "🥤" },
+    { id: "local", label: t("nearMe"), icon: "📍" },
+    { id: "coffee", label: t("coffee"), icon: "☕" },
+    { id: "juice", label: t("juice"), icon: "🧃" },
+    { id: "smoothie", label: t("smoothie"), icon: "🥤" },
+    { id: "tea", label: t("tea"), icon: "🍵" },
+  ];
+}
 
 const POPULAR_CITIES = [
   { city: "Accra", region: "Greater Accra" },
@@ -92,7 +97,7 @@ function mapProduct(product, activeTab) {
   };
 }
 
-function ProductCard({ item, onClick }) {
+function ProductCard({ item, onClick, t }) {
   return (
     <div
       onClick={onClick}
@@ -106,7 +111,7 @@ function ProductCard({ item, onClick }) {
       <h3 className="mb-1 text-base font-bold text-white">{item.name}</h3>
       <p className="text-sm text-white/60">{item.category}</p>
       {item.sellerName ? (
-        <p className="mt-1 text-xs text-white/40">by {item.sellerName}</p>
+        <p className="mt-1 text-xs text-white/40">{t("by")} {item.sellerName}</p>
       ) : null}
       <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
         <span className="flex items-center gap-1 text-sm text-white/60">
@@ -127,6 +132,7 @@ function ProductCard({ item, onClick }) {
 
 export default function FoodHubPage() {
   const { data: user } = useUser();
+  const { t } = useLocalization();
   const [activeTab, setActiveTab] = useState("food");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -250,7 +256,7 @@ export default function FoodHubPage() {
   };
 
   const currentCategories =
-    activeTab === "food" ? FOOD_CATEGORIES : DRINK_CATEGORIES;
+    activeTab === "food" ? foodCategories(t) : drinkCategories(t);
   const filteredItems = items.filter((item) => {
     if (selectedCategory === "local") {
       if (!userCity) return false;
@@ -285,7 +291,7 @@ export default function FoodHubPage() {
       <div className="sticky top-0 z-20 border-b border-white/10 bg-black">
         <div className="mx-auto max-w-7xl px-4 py-4">
           <div className="mb-4 flex items-center justify-between">
-            <h1 className="text-2xl font-bold">FoodHub</h1>
+            <h1 className="text-2xl font-bold">{t("foodhub")}</h1>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
@@ -298,7 +304,7 @@ export default function FoodHubPage() {
                     : "bg-white/10 text-white"
                 }`}
               >
-                Food
+                {t("food")}
               </button>
               <button
                 onClick={() => {
@@ -311,7 +317,7 @@ export default function FoodHubPage() {
                     : "bg-white/10 text-white"
                 }`}
               >
-                Drinks
+                {t("drinks")}
               </button>
             </div>
           </div>
@@ -327,9 +333,9 @@ export default function FoodHubPage() {
             <span className="text-sm font-medium text-white">
               {userCity
                 ? `${userCity}${userRegion ? `, ${userRegion}` : ""}`
-                : "Set your location"}
+                : t("setLocation")}
             </span>
-            <span className="ml-auto text-xs text-white/60">Change</span>
+            <span className="ml-auto text-xs text-white/60">{t("change")}</span>
           </button>
           <div className="mb-4 flex items-center gap-3">
             <div className="relative flex-1">
@@ -340,7 +346,7 @@ export default function FoodHubPage() {
               <input
                 type="text"
                 placeholder={
-                  activeTab === "drinks" ? "Search drinks..." : "Search food..."
+                  activeTab === "drinks" ? t("searchDrinks") : t("searchFood")
                 }
                 className="w-full rounded-xl border border-white/20 bg-white/10 py-2.5 pl-10 pr-4 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
                 value={searchQuery}
@@ -394,17 +400,17 @@ export default function FoodHubPage() {
             <Truck size={64} className="mx-auto mb-4 text-white/20" />
             <p className="text-lg text-white/50">
               {selectedCategory === "local" && !userCity
-                ? "Set your location to see items near you"
+                ? t("setLocationToSeeNearby")
                 : selectedCategory === "local"
-                ? `No ${activeTab} items found in ${userCity}`
-                : `No ${activeTab} items found`}
+                ? `${t("noItemsFound")} (${userCity})`
+                : t("noItemsFound")}
             </p>
             {selectedCategory === "local" && !userCity && (
               <button
                 onClick={() => setShowLocationModal(true)}
                 className="mt-4 rounded-lg bg-[#D4AF37] px-6 py-2.5 font-semibold text-black hover:opacity-90"
               >
-                Set Location
+                {t("setLocation")}
               </button>
             )}
           </div>
@@ -414,6 +420,7 @@ export default function FoodHubPage() {
               <ProductCard
                 key={item.id}
                 item={item}
+                t={t}
                 onClick={() => {
                   window.location.href = `/product/${item.id}`;
                 }}
@@ -427,7 +434,7 @@ export default function FoodHubPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center">
           <div className="flex max-h-[80vh] w-full flex-col rounded-t-2xl border border-white/10 bg-[#141414] sm:max-w-md sm:rounded-2xl">
             <div className="flex items-center justify-between border-b border-white/10 p-5">
-              <h3 className="text-lg font-bold">Your Location</h3>
+              <h3 className="text-lg font-bold">{t("yourLocation")}</h3>
               <button
                 onClick={() => setShowLocationModal(false)}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
@@ -445,11 +452,11 @@ export default function FoodHubPage() {
                 <div className="flex-1 text-left">
                   <p className="font-semibold text-[#D4AF37]">
                     {locationLoading
-                      ? "Detecting your location..."
-                      : "Use Current Location"}
+                      ? t("detectingLocation")
+                      : t("useCurrentLocation")}
                   </p>
                   <p className="text-xs text-white/50">
-                    Automatically detect your city
+                    {t("autoDetectCity")}
                   </p>
                 </div>
               </button>
@@ -461,7 +468,7 @@ export default function FoodHubPage() {
                 <input
                   value={citySearch}
                   onChange={(e) => setCitySearch(e.target.value)}
-                  placeholder="Type your city name..."
+                  placeholder={t("typeCity")}
                   className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none"
                 />
               </div>
@@ -487,7 +494,7 @@ export default function FoodHubPage() {
                       >
                         {c.city}
                       </p>
-                      <p className="text-xs text-white/40">{c.region} Region</p>
+                      <p className="text-xs text-white/40">{c.region} {t("region")}</p>
                     </div>
                     {userCity === c.city && (
                       <MapPin size={16} className="text-[#D4AF37]" />
@@ -505,8 +512,8 @@ export default function FoodHubPage() {
                       }}
                       className="w-full rounded-lg border border-dashed border-white/20 px-4 py-3 text-left hover:bg-white/5"
                     >
-                      <p className="text-white">Use "{citySearch.trim()}"</p>
-                      <p className="text-xs text-white/40">Set as your city</p>
+                      <p className="text-white">{citySearch.trim()}</p>
+                      <p className="text-xs text-white/40">{t("setLocation")}</p>
                     </button>
                   )}
               </div>
