@@ -67,7 +67,7 @@ export async function GET(request) {
         GROUP BY 1
         ORDER BY 1
       `,
-      // Video engagement totals (cumulative, like TikTok's content overview)
+      // Video engagement totals
       sql`
         SELECT
           COUNT(*) as videos,
@@ -77,58 +77,57 @@ export async function GET(request) {
           COALESCE(SUM(shares_count), 0) as shares
         FROM videos
         WHERE creator_user_id = ${sellerId}
-          AND status = 'active'
-          AND deleted_at IS NULL
+          AND COALESCE(status, 'published') NOT IN ('deleted', 'trashed')
       `,
-      // Followers: total + gained in period
+      // Followers total + gained in period
       sql`
         SELECT
-          (SELECT COUNT(*) FROM follows WHERE following_id = ${sellerId}) as total,
-          (SELECT COUNT(*) FROM follows
-            WHERE following_id = ${sellerId}
-              AND created_at >= NOW() - make_interval(days => ${days})) as gained
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE created_at >= NOW() - make_interval(days => ${days})) as gained
+        FROM follows
+        WHERE following_id = ${sellerId}
       `,
-      // Top products by revenue in period
+      // Top products by revenue
       sql`
         SELECT
-          o.item_id as id,
-          COALESCE(NULLIF(o.item_title, ''), p.title, 'Product') as title,
+          p.id,
+          p.title,
           p.media,
           COALESCE(SUM(o.total_amount), 0) as revenue,
-          COUNT(*) as orders,
-          COALESCE(SUM(o.quantity), COUNT(*)) as units
+          COUNT(o.id) as orders,
+          COALESCE(SUM(o.quantity), 0) as units
         FROM orders o
-        LEFT JOIN products p ON o.item_id = p.id
+        LEFT JOIN products p ON p.id = o.item_id
         WHERE o.seller_id = ${sellerId}
           AND o.payment_status = 'paid'
           AND o.created_at >= NOW() - make_interval(days => ${days})
-        GROUP BY o.item_id, o.item_title, p.title, p.media
+        GROUP BY p.id, p.title, p.media
         ORDER BY revenue DESC
-        LIMIT 5
+        LIMIT 10
       `,
       // Top videos by views
       sql`
         SELECT id, caption, thumbnail_url, views_count, likes_count, comments_count, shares_count
         FROM videos
         WHERE creator_user_id = ${sellerId}
-          AND status = 'active'
-          AND deleted_at IS NULL
-        ORDER BY views_count DESC
-        LIMIT 5
+          AND COALESCE(status, 'published') NOT IN ('deleted', 'trashed')
+        ORDER BY views_count DESC NULLS LAST
+        LIMIT 10
       `,
     ]);
 
-    // Fill a continuous daily axis so the chart has no gaps
+    // Build continuous daily trend (fill missing days with 0)
     const dayMap = {};
-    for (const r of dailyRows) {
-      dayMap[r.day] = {
-        revenue: parseFloat(r.revenue) || 0,
-        orders: parseInt(r.orders) || 0,
+    for (const row of dailyRows || []) {
+      dayMap[row.day] = {
+        revenue: parseFloat(row.revenue) || 0,
+        orders: parseInt(row.orders) || 0,
       };
     }
     const trend = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date();
+      d.setHours(0, 0, 0, 0);
       d.setDate(d.getDate() - i);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -149,24 +148,37 @@ export async function GET(request) {
     const gmv = parseFloat(current.gmv) || 0;
     const orderCount = parseInt(current.orders) || 0;
 
+    const views = parseInt(videoStats.views) || 0;
+    const followers = parseInt(followerStats.total) || 0;
+    const followersGained = parseInt(followerStats.gained) || 0;
+    const revenueChange = pctChange(current.gmv, previous.gmv);
+    const ordersChange = pctChange(current.orders, previous.orders);
+
     return Response.json({
       days,
       overview: {
-        gmv,
-        gmvChange: pctChange(current.gmv, previous.gmv),
+        // Primary metrics (SellerAnalytics UI)
+        revenue: gmv,
+        revenueChange,
         orders: orderCount,
-        ordersChange: pctChange(current.orders, previous.orders),
-        avgOrderValue: orderCount > 0 ? Math.round((gmv / orderCount) * 100) / 100 : 0,
-        customers: parseInt(current.customers) || 0,
-        videos: parseInt(videoStats.videos) || 0,
-        views: parseInt(videoStats.views) || 0,
+        ordersChange,
+        views,
+        viewsChange: null,
+        followers,
+        followersChange: followersGained,
         likes: parseInt(videoStats.likes) || 0,
         comments: parseInt(videoStats.comments) || 0,
         shares: parseInt(videoStats.shares) || 0,
-        followers: parseInt(followerStats.total) || 0,
-        followersGained: parseInt(followerStats.gained) || 0,
+        // Aliases / extras
+        gmv,
+        gmvChange: revenueChange,
+        avgOrderValue: orderCount > 0 ? Math.round((gmv / orderCount) * 100) / 100 : 0,
+        customers: parseInt(current.customers) || 0,
+        videos: parseInt(videoStats.videos) || 0,
+        followersGained,
       },
       trend,
+      revenueTrend: trend,
       topProducts: topProducts.map((p) => {
         let image = null;
         try {
@@ -191,7 +203,9 @@ export async function GET(request) {
         caption: v.caption,
         thumbnail: v.thumbnail_url,
         views: parseInt(v.views_count) || 0,
+        views_count: parseInt(v.views_count) || 0,
         likes: parseInt(v.likes_count) || 0,
+        likes_count: parseInt(v.likes_count) || 0,
         comments: parseInt(v.comments_count) || 0,
         shares: parseInt(v.shares_count) || 0,
       })),
