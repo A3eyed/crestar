@@ -1,9 +1,12 @@
+// @ts-nocheck
 import type { MetadataRoute } from 'next';
 
-const BASE_URL = 'https://crestar.created.app';
+const SITE_URL = 'https://crestarhq.com';
 
-// robots.txt — allow full crawling of public content, block private/user
-// areas and API routes, and point crawlers at the sitemap.
+/**
+ * Next.js robots route — works alongside public/robots.txt.
+ * Admin and private areas must never be indexed.
+ */
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
@@ -11,27 +14,19 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: '*',
         allow: '/',
         disallow: [
-          '/api/',
           '/admin',
           '/admin/',
+          '/api/admin',
+          '/api/admin/',
+          '/account/',
           '/wallet',
           '/orders',
-          '/inbox',
-          '/cart',
-          '/checkout',
-          '/settings',
-          '/settings/',
-          '/edit-profile',
-          '/monetization-center',
-          '/seller/dashboard',
-          '/seller/analytics',
-          '/account/logout',
-          '/account/reset-password',
-          '/account/change-password',
-          '/test-signup',
+          '/seller/',
+          '/api/',
         ],
       },
     ],
-    sitemap: `${BASE_URL}/sitemap.xml`,
+    sitemap: `${SITE_URL}/sitemap.xml`,
+    host: SITE_URL,
   };
 }

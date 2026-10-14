@@ -9,26 +9,39 @@ const SITE_URL = 'https://crestarhq.com';
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Crestar — Shop, Create, Earn Together',
+    default: 'Crestar — Shop, Create, Earn Together | Social Commerce',
     template: '%s | Crestar',
   },
   description:
-    'Crestar is the social commerce platform built for Africa and beyond. Buy and sell products through short videos and live shopping, connect with verified sellers, order food, and earn from your content with affiliate commissions.',
+    'Crestar (crestarhq.com) is the social commerce platform for Ghana and Africa. Buy and sell products through short videos and live shopping, connect with verified sellers, order food, pay with mobile money, and earn from your content with affiliate commissions.',
   keywords: [
     'Crestar',
-    'social commerce',
-    'live shopping',
+    'Crestar HQ',
+    'crestarhq',
+    'crestarhq.com',
+    'Crestar Ghana',
+    'Crestar app',
+    'Crestar marketplace',
+    'Crestar social commerce',
+    'social commerce Ghana',
+    'social commerce Africa',
+    'live shopping Ghana',
     'video shopping',
     'sell online Ghana',
-    'buy online Africa',
-    'food delivery',
+    'buy online Ghana',
+    'online marketplace Ghana',
+    'mobile money shopping',
+    'MoMo shopping',
+    'food delivery Ghana',
     'creator earnings',
     'affiliate commission',
-    'online marketplace',
-    'mobile money shopping',
+    'live commerce',
+    'shop through video',
   ],
   applicationName: 'Crestar',
-  authors: [{ name: 'Crestar' }],
+  authors: [{ name: 'Crestar', url: SITE_URL }],
+  creator: 'Crestar',
+  publisher: 'Crestar',
   category: 'shopping',
   icons: {
     icon: [
@@ -43,15 +56,15 @@ export const metadata = {
     siteName: 'Crestar',
     title: 'Crestar — Shop, Create, Earn Together',
     description:
-      'The social commerce platform built for Africa and beyond. Buy and sell products through live video, connect with sellers, and earn from your content.',
-    url: '/',
-    locale: 'en_US',
+      'Crestar is social commerce for Ghana and Africa. Buy and sell through live video, connect with verified sellers, and earn from your content.',
+    url: SITE_URL,
+    locale: 'en_GH',
     images: [
       {
         url: '/logo.png',
         width: 1024,
         height: 1024,
-        alt: 'Crestar logo',
+        alt: 'Crestar — Shop, Create, Earn Together',
       },
     ],
   },
@@ -74,7 +87,11 @@ export const metadata = {
     },
   },
   alternates: {
-    canonical: '/',
+    canonical: SITE_URL,
+  },
+  verification: {
+    // Add Google Search Console verification token here when available:
+    // google: 'your-google-site-verification-token',
   },
 };
 
@@ -85,10 +102,20 @@ const structuredData = {
       '@type': 'Organization',
       '@id': `${SITE_URL}/#organization`,
       name: 'Crestar',
+      alternateName: ['Crestar HQ', 'crestarhq'],
       url: SITE_URL,
-      logo: `${SITE_URL}/logo.png`,
+      logo: {
+        '@type': 'ImageObject',
+        url: `${SITE_URL}/logo.png`,
+      },
       description:
-        'Crestar is the social commerce platform built for Africa and beyond — buy and sell through short videos and live shopping, order food, and earn from your content.',
+        'Crestar is the social commerce platform built for Ghana and Africa — buy and sell through short videos and live shopping, order food, pay with mobile money, and earn from your content.',
+      sameAs: [],
+      contactPoint: {
+        '@type': 'ContactPoint',
+        contactType: 'customer support',
+        availableLanguage: ['English'],
+      },
     },
     {
       '@type': 'WebSite',
@@ -97,14 +124,29 @@ const structuredData = {
       alternateName: 'Crestar — Shop, Create, Earn Together',
       url: SITE_URL,
       publisher: { '@id': `${SITE_URL}/#organization` },
+      inLanguage: 'en-GH',
       potentialAction: {
         '@type': 'SearchAction',
         target: {
           '@type': 'EntryPoint',
-          urlTemplate: `${SITE_URL}/shop?q={search_term_string}`,
+          urlTemplate: `${SITE_URL}/search?q={search_term_string}`,
         },
         'query-input': 'required name=search_term_string',
       },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'Crestar',
+      applicationCategory: 'ShoppingApplication',
+      operatingSystem: 'Web, iOS, Android',
+      url: SITE_URL,
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'GHS',
+      },
+      description:
+        'Social commerce app to shop through video, sell products, go live, and earn affiliate commissions in Ghana and across Africa.',
     },
   ],
 };
@@ -112,6 +154,9 @@ const structuredData = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="canonical" href={SITE_URL} />
+      </head>
       <body>
         <script
           type="application/ld+json"
