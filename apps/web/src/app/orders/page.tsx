@@ -50,12 +50,44 @@ export default function OrdersPage() {
   const [confirmSuccessId, setConfirmSuccessId] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [cancellingId, setCancellingId] = useState(null);
+  const [isSeller, setIsSeller] = useState(false);
   const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // Only approved sellers / FoodHub vendors see "My sales"
+  useEffect(() => {
+    if (!user?.id) {
+      setIsSeller(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/business-centers');
+        if (!res.ok) return;
+        const data = await res.json();
+        const center = data.center || data.businessCenter;
+        const type = center?.center_type || center?.type;
+        const ok =
+          !!data.has_center &&
+          (type === 'seller' || type === 'foodhub') &&
+          (center?.status === 'active' || center?.verification_status === 'approved' || !center?.status);
+        if (!cancelled) {
+          setIsSeller(!!ok);
+          if (!ok && role === 'seller') setRole('buyer');
+        }
+      } catch {
+        if (!cancelled) setIsSeller(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const fetchOrders = useCallback(
     async ({ silent = false } = {}) => {
@@ -182,10 +214,14 @@ export default function OrdersPage() {
           <h1 className="text-lg font-semibold">Orders</h1>
         </div>
         <div className="max-w-xl mx-auto px-4 pb-2 flex gap-2">
-          {[
-            { id: 'buyer', label: 'My purchases', icon: ShoppingBag },
-            { id: 'seller', label: 'My sales', icon: Package },
-          ].map((r) => (
+          {(
+            isSeller
+              ? [
+                  { id: 'buyer', label: 'My purchases' },
+                  { id: 'seller', label: 'My sales' },
+                ]
+              : [{ id: 'buyer', label: 'My purchases' }]
+          ).map((r) => (
             <button
               key={r.id}
               type="button"
