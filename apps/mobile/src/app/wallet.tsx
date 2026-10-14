@@ -176,7 +176,7 @@ export default function CrestarEarningsWalletScreen() {
               lineHeight: 18,
             }}
           >
-            Crestar keeps 5% of each sale. ented with the
+            Crestar keeps 5% of each sale. Your wallet is credited with the
             other 95%.
           </Text>
         </View>
