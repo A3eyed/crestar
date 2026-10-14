@@ -8,6 +8,8 @@ import { resolveUserId } from '@/app/api/utils/auth';
  *
  * Source of truth for the code is auth_users (same table send-verification writes).
  * Also updates public."user".emailVerified for Better Auth session consumers.
+ *
+ * Does NOT set is_verified (gold checkmark) — that is granted only by admins.
  */
 export async function POST(request) {
   try {
@@ -23,14 +25,12 @@ export async function POST(request) {
       return Response.json({ error: 'Invalid code format' }, { status: 400 });
     }
 
-    // Primary: auth_users (where send-verification stores the code)
     const [profile] = await sql`
       SELECT id, email_verified, email_verification_code,
              email_verification_expires, email_verification_attempts
       FROM auth_users WHERE id = ${userId}
     `;
 
-    // Fallback: public."user" if auth_users row missing
     let row = profile;
     let source = 'auth_users';
     if (!row) {
@@ -94,11 +94,10 @@ export async function POST(request) {
       return Response.json({ error: 'Incorrect code.' }, { status: 400 });
     }
 
-    // Success — mark both tables verified and clear code
+    // email_verified only — gold checkmark (is_verified) is admin-granted only
     await sql`
       UPDATE auth_users
       SET email_verified = TRUE,
-          is_verified = TRUE,
           email_verification_code = NULL,
           email_verification_expires = NULL,
           email_verification_attempts = 0,
@@ -120,7 +119,7 @@ export async function POST(request) {
       /* ignore */
     }
 
-    console.log(`[verify-email] ✅ Verified user ${userId}`);
+    console.log(`[verify-email] ✅ Email verified for user ${userId}`);
     return Response.json({ success: true });
   } catch (error) {
     console.error('[verify-email] error:', error);
