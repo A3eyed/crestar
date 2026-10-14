@@ -1,8 +1,13 @@
 // @ts-nocheck
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import useUser from '@/utils/useUser';
 import CurrencyPrice from '@/components/CurrencyPrice';
+import {
+  AFRICA_COUNTRIES,
+  getRegionsForCountry,
+  getCountryMeta,
+} from '@/utils/africaMarkets';
 import {
   ArrowLeft,
   MapPin,
@@ -11,6 +16,7 @@ import {
   ShoppingBag,
   AlertCircle,
   Lock,
+  Search,
 } from 'lucide-react';
 
 export default function CheckoutPage() {
@@ -19,15 +25,28 @@ export default function CheckoutPage() {
   const [loaded, setLoaded] = useState(false);
   const [isBuyNow, setIsBuyNow] = useState(false);
 
+  // Delivery — only buyer-entered values; never fabricated
   const [recipientName, setRecipientName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
+  const [country, setCountry] = useState('');
   const [region, setRegion] = useState('');
+  const [city, setCity] = useState('');
+  const [citySearch, setCitySearch] = useState('');
+  const [streetAddress, setStreetAddress] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [landmark, setLandmark] = useState('');
 
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
+
+  const regions = useMemo(() => (country ? getRegionsForCountry(country) : []), [country]);
+  const countryMeta = country ? getCountryMeta(country) : null;
+
+  // Filter regions as a city-search helper when the list is region-as-city style
+  const filteredRegions = useMemo(() => {
+    if (!citySearch.trim()) return regions;
+    const q = citySearch.trim().toLowerCase();
+    return regions.filter((r) => r.toLowerCase().includes(q));
+  }, [regions, citySearch]);
 
   useEffect(() => {
     try {
@@ -36,7 +55,6 @@ export default function CheckoutPage() {
       setIsBuyNow(buyNowMode);
 
       if (buyNowMode) {
-        // TikTok-style express lane: single item, separate from the cart
         const expressRaw = sessionStorage.getItem('buy_now_item');
         const expressItem = expressRaw ? JSON.parse(expressRaw) : null;
         setCart(expressItem ? [expressItem] : []);
@@ -44,6 +62,9 @@ export default function CheckoutPage() {
         const stored = JSON.parse(localStorage.getItem('cart') || '[]');
         setCart(Array.isArray(stored) ? stored : []);
       }
+
+      // Prefill name from account only — never invent address fields
+      // (phone/address stay empty until the buyer types them)
     } catch (e) {
       setCart([]);
     }
@@ -56,9 +77,23 @@ export default function CheckoutPage() {
     }
   }, [user, userLoading]);
 
+  // When country changes, clear region/city so we never keep a mismatched place
+  const onCountryChange = (code) => {
+    setCountry(code);
+    setRegion('');
+    setCity('');
+    setCitySearch('');
+  };
+
+  const onRegionChange = (value) => {
+    setRegion(value);
+    // If city was auto-copied from a previous region pick, clear it
+    if (city && city === region) setCity('');
+  };
+
   const subtotal = cart.reduce(
     (sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1),
-    0
+    0,
   );
 
   const handlePlaceOrder = async () => {
@@ -67,10 +102,56 @@ export default function CheckoutPage() {
       setError('Your cart is empty');
       return;
     }
-    if (!recipientName.trim() || !phoneNumber.trim() || !address.trim() || !city.trim()) {
-      setError('Please fill in your name, phone number, address, and city');
+
+    const name = recipientName.trim();
+    const phone = phoneNumber.trim();
+    const street = streetAddress.trim();
+    const cityVal = city.trim();
+    const regionVal = region.trim();
+    const countryVal = country.trim();
+    const landmarkVal = landmark.trim();
+
+    if (!name) {
+      setError('Please enter the recipient name');
       return;
     }
+    if (!countryVal) {
+      setError('Please select your country');
+      return;
+    }
+    if (!regionVal) {
+      setError('Please select your region or state');
+      return;
+    }
+    if (!cityVal) {
+      setError('Please enter or select your city');
+      return;
+    }
+    if (!street) {
+      setError('Please enter your street address or house number');
+      return;
+    }
+    if (!phone) {
+      setError('Please enter a phone number for delivery');
+      return;
+    }
+    if (!landmarkVal) {
+      setError('Please enter a landmark closest to your location');
+      return;
+    }
+
+    // Payload uses ONLY buyer-entered fields — no defaults, no invented places
+    const deliveryAddress = {
+      address: street,
+      street: street,
+      city: cityVal,
+      region: regionVal,
+      country: countryVal,
+      countryName: countryMeta?.name || countryVal,
+      landmark: landmarkVal,
+      phone: phone,
+      recipientName: name,
+    };
 
     setPlacing(true);
     try {
@@ -79,32 +160,25 @@ export default function CheckoutPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: cart,
-          deliveryAddress: {
-            address: address.trim(),
-            city: city.trim(),
-            region: region.trim() || null,
-            country: 'GH',
-          },
-          phoneNumber: phoneNumber.trim(),
-          recipientName: recipientName.trim(),
-          landmark: landmark.trim() || null,
-          city: city.trim(),
-          region: region.trim() || null,
+          deliveryAddress,
+          phoneNumber: phone,
+          recipientName: name,
+          landmark: landmarkVal,
+          city: cityVal,
+          region: regionVal,
+          country: countryVal,
           callbackUrl: `${window.location.origin}/orders?verify=1`,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        // Self-healing cart: if the server says some items no longer exist,
-        // remove ONLY those items and ask the user to retry.
         if (
           data?.unavailableItems &&
           Array.isArray(data.unavailableItems) &&
           data.unavailableItems.length > 0
         ) {
           if (isBuyNow) {
-            // Express item is gone — clear it and send the user back
             sessionStorage.removeItem('buy_now_item');
             setCart([]);
             setError(data.error || 'This item is no longer available.');
@@ -112,14 +186,14 @@ export default function CheckoutPage() {
             return;
           }
           const badIds = new Set(
-            data.unavailableItems.flatMap((b) => [b.id, b.cartKey].filter(Boolean))
+            data.unavailableItems.flatMap((b) => [b.id, b.cartKey].filter(Boolean)),
           );
           const cleaned = cart.filter((it) => !badIds.has(it.id) && !badIds.has(it.cartKey));
           setCart(cleaned);
           localStorage.setItem('cart', JSON.stringify(cleaned));
           setError(
             data.error ||
-              'Some items in your cart are no longer available and were removed. Please try again.'
+              'Some items in your cart are no longer available and were removed. Please try again.',
           );
           setPlacing(false);
           return;
@@ -127,20 +201,14 @@ export default function CheckoutPage() {
         throw new Error(data.error || 'Checkout failed. Please try again.');
       }
 
-      // TikTok-style: cart stays saved until payment actually completes.
-      // Store the payment reference so the orders page can verify and
-      // clear the cart once Paystack confirms.
       if (data.reference) {
-        localStorage.setItem('pending_payment_reference', data.reference);
-        // Let the verification step know this was an express purchase so it
-        // clears the buy-now item instead of the shared cart.
+        local        localStorage.setItem('pending_payment_reference', data.reference);
         localStorage.setItem('pending_payment_buynow', isBuyNow ? '1' : '0');
       }
 
       if (data.paymentUrl) {
         window.location.href = data.paymentUrl;
       } else {
-        // Payment init failed — order exists as pending, pay from Orders
         window.location.href = '/orders';
       }
     } catch (err) {
@@ -186,9 +254,11 @@ export default function CheckoutPage() {
     );
   }
 
+  const inputClass =
+    'w-full bg-white/5 border border-white/15 rounded-lg px-4 py-3 text-white placeholder-white/30 focus:border-[#D4AF37] focus:outline-none [&>option]:bg-black';
+
   return (
     <div className="min-h-screen bg-black text-white pb-32">
-      {/* Header */}
       <div className="sticky top-0 z-20 bg-black border-b border-white/10">
         <div className="max-w-xl mx-auto px-4 py-4 flex items-center gap-4">
           <a
@@ -238,32 +308,138 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* Delivery details */}
+        {/* Delivery details — buyer entered only */}
         <div>
-          <h2 className="font-bold text-lg mb-3">Delivery Details</h2>
+          <h2 className="font-bold text-lg mb-1">Delivery Details</h2>
+          <p className="text-white/45 text-xs mb-4">
+            Enter the exact location where the order should be delivered. We only use what you type
+            here.
+          </p>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">Recipient Name</label>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Recipient Name <span className="text-[#D4AF37]">*</span>
+              </label>
               <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3">
                 <UserIcon size={16} className="text-white/40" />
                 <input
                   value={recipientName}
                   onChange={(e) => setRecipientName(e.target.value)}
                   placeholder="Who is receiving this order?"
+                  autoComplete="name"
                   className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">Phone Number</label>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Country <span className="text-[#D4AF37]">*</span>
+              </label>
+              <select
+                value={country}
+                onChange={(e) => onCountryChange(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Select country...</option>
+                {AFRICA_COUNTRIES.filter((c) => c.code !== 'GH_OTHER').map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Region / State <span className="text-[#D4AF37]">*</span>
+              </label>
+              <select
+                value={region}
+                onChange={(e) => onRegionChange(e.target.value)}
+                disabled={!country}
+                className={inputClass + ' disabled:opacity-40'}
+              >
+                <option value="">{country ? 'Select region or state...' : 'Select country first'}</option>
+                {regions.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                City <span className="text-[#D4AF37]">*</span>
+              </label>
+              <div className="relative">
+                <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3">
+                  <Search size={16} className="text-white/40" />
+                  <input
+                    value={city}
+                    onChange={(e) => {
+                      setCity(e.target.value);
+                      setCitySearch(e.target.value);
+                    }}
+                    onFocus={() => setCitySearch(city)}
+                    placeholder={region ? 'Type or search your city' : 'Select region first'}
+                    disabled={!region}
+                    autoComplete="address-level2"
+                    className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none disabled:opacity-40"
+                  />
+                </div>
+                {region && citySearch.trim() && filteredRegions.length > 0 && citySearch !== region && (
+                  <div className="absolute z-10 left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-[#1a1a1a] border border-white/15 rounded-lg shadow-xl">
+                    {filteredRegions.slice(0, 8).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => {
+                          setCity(r);
+                          setCitySearch('');
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-white/90 hover:bg-white/10"
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-white/35 text-[11px] mt-1">
+                Type your city name, or pick a suggestion from the list.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Street address / house number <span className="text-[#D4AF37]">*</span>
+              </label>
+              <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3">
+                <MapPin size={16} className="text-white/40" />
+                <input
+                  value={streetAddress}
+                  onChange={(e) => setStreetAddress(e.target.value)}
+                  placeholder="Street, house number, or building"
+                  autoComplete="street-address"
+                  className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Phone Number <span className="text-[#D4AF37]">*</span>
+              </label>
               <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3">
                 <Phone size={16} className="text-white/40" />
                 <input
                   type="tel"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="024 XXX XXXX"
+                  placeholder="Number the deliverer can call"
+                  autoComplete="tel"
                   className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none"
                 />
               </div>
@@ -271,62 +447,26 @@ export default function CheckoutPage() {
 
             <div>
               <label className="block text-sm font-medium text-white/80 mb-2">
-                Delivery Address
-              </label>
-              <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3">
-                <MapPin size={16} className="text-white/40" />
-                <input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Street address / house number"
-                  className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">City</label>
-                <input
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="e.g. Accra"
-                  className="w-full bg-white/5 border border-white/15 rounded-lg px-4 py-3 text-white placeholder-white/30 focus:border-[#D4AF37] focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  Region (optional)
-                </label>
-                <input
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                  placeholder="e.g. Greater Accra"
-                  className="w-full bg-white/5 border border-white/15 rounded-lg px-4 py-3 text-white placeholder-white/30 focus:border-[#D4AF37] focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">
-                Landmark (optional)
+                Landmark (closest to you) <span className="text-[#D4AF37]">*</span>
               </label>
               <input
                 value={landmark}
                 onChange={(e) => setLandmark(e.target.value)}
-                placeholder="Nearby landmark to help the deliverer"
-                className="w-full bg-white/5 border border-white/15 rounded-lg px-4 py-3 text-white placeholder-white/30 focus:border-[#D4AF37] focus:outline-none"
+                placeholder="e.g. near Total station, opposite the big church"
+                className={inputClass}
               />
+              <p className="text-white/35 text-[11px] mt-1">
+                A nearby landmark helps the deliverer find you faster.
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Buyer protection note */}
         <div className="flex items-start gap-3 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-xl p-4">
           <Lock size={18} className="text-[#D4AF37] mt-0.5 shrink-0" />
           <p className="text-white/70 text-sm">
             Your payment is held securely and only released to the seller after you confirm
-            delivery. If payment isn't completed, your items stay in your cart.
+            delivery. Delivery uses only the details you entered above.
           </p>
         </div>
 
@@ -338,7 +478,6 @@ export default function CheckoutPage() {
         )}
       </div>
 
-      {/* Bottom bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-white/10">
         <div className="max-w-xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div>
