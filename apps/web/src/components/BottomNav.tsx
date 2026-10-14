@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import useUser from "@/utils/useUser";
+import useLocalization from "@/utils/useLocalization";
 
 const BRAND = "#D4AF37";
 const INACTIVE = "#9CA3AF";
@@ -9,13 +10,14 @@ const INACTIVE = "#9CA3AF";
 export default function BottomNav() {
   const [currentPath, setCurrentPath] = useState("");
   const { data: user } = useUser();
+  const { t } = useLocalization();
 
   useEffect(() => {
     setCurrentPath(window.location.pathname || "/");
   }, []);
 
   const profilePath = user ? "/profile" : "/account/signin";
-  const profileLabel = user ? "Profile" : "Sign in";
+  const profileLabel = user ? t("profile") : t("signIn");
 
   const isActive = (path) => {
     if (!currentPath) return false;
@@ -24,10 +26,10 @@ export default function BottomNav() {
   };
 
   const items = [
-    { id: "feed", label: "Home", path: "/", icon: HomeIcon },
-    { id: "shop", label: "Shop", path: "/shop", icon: ShopIcon },
-    { id: "create", label: "Create", path: "/create", isCenter: true },
-    { id: "foodhub", label: "FoodHub", path: "/foodhub", icon: FoodIcon },
+    { id: "feed", label: t("home"), path: "/", icon: HomeIcon },
+    { id: "shop", label: t("shop"), path: "/shop", icon: ShopIcon },
+    { id: "create", label: t("create"), path: "/create", isCenter: true },
+    { id: "foodhub", label: t("foodhub"), path: "/foodhub", icon: FoodIcon },
     {
       id: "profile",
       label: profileLabel,
@@ -48,7 +50,7 @@ export default function BottomNav() {
               <a
                 key={item.id}
                 href={item.path}
-                aria-label="Create"
+                aria-label={item.label}
                 className="flex flex-1 flex-col items-center justify-end pb-1"
               >
                 <div className="mb-1 flex h-14 w-14 items-center justify-center rounded-full border-4 border-black bg-[#D4AF37] shadow-lg">
