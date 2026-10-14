@@ -3,7 +3,7 @@ import { Store, Bike, ChefHat, Video } from 'lucide-react-native';
 import { PLATFORM_FEE_PERCENT, EARNER_PERCENT } from '@/utils/platformFee';
 
 /**
- * Every Crestar program pays the SAME flat platform fee — 3%. There are no
+ * Every Crestar program pays the SAME flat platform fee — 5%. There are no
  * per-program rates, tiers or exceptions.
  */
 const FLAT_FEE_BENEFIT = `Flat ${PLATFORM_FEE_PERCENT}% Crestar fee — you keep ${EARNER_PERCENT}%`;

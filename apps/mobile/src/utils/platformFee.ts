@@ -6,17 +6,17 @@
  *
  * Mobile mirror of `apps/web/src/app/api/utils/platformFee.ts`.
  *
- * Crestar charges a single, flat 3% platform fee — the ONLY fee Crestar takes,
+ * Crestar charges a single, flat 5% platform fee — the ONLY fee Crestar takes,
  * identical across every Monetization Center program: Seller, FoodHub, Creator
  * and Deliverer. Every earnings figure shown in the app must be the NET amount
- * the user actually receives after this 3% has been deducted.
+ * the user actually receives after this 5% has been deducted.
  */
 
 /** The flat platform fee, as a decimal fraction. */
-export const PLATFORM_FEE_RATE = 0.03;
+export const PLATFORM_FEE_RATE = 0.05;
 
 /** The flat platform fee, as a whole percentage. */
-export const PLATFORM_FEE_PERCENT = 3;
+export const PLATFORM_FEE_PERCENT = 5;
 
 /** Share of a transaction the earner keeps, as a whole percentage. */
 export const EARNER_PERCENT = 100 - PLATFORM_FEE_PERCENT;
@@ -34,13 +34,13 @@ export function money(value) {
   return Math.round(amount * 100) / 100;
 }
 
-/** The 3% Crestar keeps out of a gross amount. */
+/** The 5% Crestar keeps out of a gross amount. */
 export function platformFeeOn(grossAmount) {
   const gross = Math.max(0, money(grossAmount));
   return money(gross * PLATFORM_FEE_RATE);
 }
 
-/** What the earner actually receives out of a gross amount (gross − 3%). */
+/** What the earner actually receives out of a gross amount (gross − 5%). */
 export function netOfPlatformFee(grossAmount) {
   const gross = Math.max(0, money(grossAmount));
   return money(gross - platformFeeOn(gross));

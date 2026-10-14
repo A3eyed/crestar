@@ -61,16 +61,16 @@ export const getTransactionColor = (type) => {
 
 export const getTransactionLabel = (tx) => {
   const labels = {
-    order_payout: "Order earning, after 3% fee",
-    delivery_fee: "Delivery earning, after 3% fee",
-    creator_commission: "Creator commission, after 3% fee",
+    order_payout: "Order earning, after 5% fee",
+    delivery_fee: "Delivery earning, after 5% fee",
+    creator_commission: "Creator commission, after 5% fee",
     creator_commission_hold: "Commission waiting on delivery PIN",
     escrow_release: "Earning released",
     escrow_hold: "Sale waiting on delivery PIN",
     deposit: "Deposit",
     refund: "Refund",
     withdrawal: "Cash out",
-    platform_fee: "Crestar 3% fee",
+    platform_fee: "Crestar 5% fee",
     purchase: "Order payment",
     order_payment: "Order payment",
   };
