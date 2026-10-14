@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import useUser from '@/utils/useUser';
 import useAuth from '@/utils/useAuth';
+import useLocalization from '@/utils/useLocalization';
 import {
   ArrowLeft,
   Bell,
@@ -17,6 +18,7 @@ import {
 export default function SettingsPage() {
   const { data: user, loading } = useUser();
   const { signOut } = useAuth();
+  const { t } = useLocalization();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -51,11 +53,11 @@ export default function SettingsPage() {
   }
 
   const rows = [
-    { href: '/edit-profile', icon: User, label: 'Edit profile' },
-    { href: '/settings/notifications', icon: Bell, label: 'Notifications' },
-    { href: '/settings/language', icon: Globe, label: 'Language' },
-    { href: '/settings/currency', icon: Coins, label: 'Currency' },
-    { href: '/settings/privacy', icon: Lock, label: 'Privacy & safety' },
+    { href: '/edit-profile', icon: User, label: t('editProfile') },
+    { href: '/settings/notifications', icon: Bell, label: t('notifications') },
+    { href: '/settings/language', icon: Globe, label: t('language') },
+    { href: '/settings/currency', icon: Coins, label: t('currency') },
+    { href: '/settings/privacy', icon: Lock, label: t('privacy') },
   ];
 
   return (
@@ -65,7 +67,7 @@ export default function SettingsPage() {
           <button type="button" onClick={() => window.history.back()} className="p-1">
             <ArrowLeft size={22} />
           </button>
-          <h1 className="text-lg font-semibold">Settings</h1>
+          <h1 className="text-lg font-semibold">{t('settings')}</h1>
         </div>
       </div>
 
@@ -90,7 +92,7 @@ export default function SettingsPage() {
         >
           <LogOut size={20} className="text-red-400" />
           <span className="flex-1 font-medium text-red-400">
-            {busy ? 'Signing out…' : 'Sign out'}
+            {busy ? t('signingOut') : t('signOut')}
           </span>
         </button>
       </div>
