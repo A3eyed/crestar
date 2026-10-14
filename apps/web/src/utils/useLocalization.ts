@@ -64,6 +64,7 @@ const WEB_TRANSLATIONS = {
     shop: 'Shop',
     foodhub: 'FoodHub',
     profile: 'Profile',
+    create: 'Create',
     addToCart: 'Add to Cart',
     shopNow: 'Shop Now',
     bookNow: 'Book Now',
@@ -72,12 +73,24 @@ const WEB_TRANSLATIONS = {
     search: 'Search',
     settings: 'Settings',
     logout: 'Log out',
+    signOut: 'Sign out',
     signIn: 'Sign In',
     signUp: 'Sign Up',
     orders: 'Orders',
     wallet: 'Wallet',
     loading: 'Loading...',
     noProductsFound: 'No products found',
+    editProfile: 'Edit profile',
+    notifications: 'Notifications',
+    language: 'Language',
+    currency: 'Currency',
+    privacy: 'Privacy & safety',
+    languageHint:
+      'Your language changes instantly across the app — no reload needed.',
+    currencyHint:
+      'All prices convert to your preferred currency. Sellers keep their original currency.',
+    current: 'Current',
+    signingOut: 'Signing out…',
   },
   fr: {
     home: 'Accueil',
@@ -85,6 +98,7 @@ const WEB_TRANSLATIONS = {
     shop: 'Boutique',
     foodhub: 'Cuisine',
     profile: 'Profil',
+    create: 'Créer',
     addToCart: 'Ajouter au panier',
     shopNow: 'Acheter maintenant',
     bookNow: 'Réserver',
@@ -93,12 +107,24 @@ const WEB_TRANSLATIONS = {
     search: 'Rechercher',
     settings: 'Paramètres',
     logout: 'Déconnexion',
+    signOut: 'Se déconnecter',
     signIn: 'Se connecter',
     signUp: "S'inscrire",
     orders: 'Commandes',
     wallet: 'Portefeuille',
     loading: 'Chargement...',
     noProductsFound: 'Aucun produit trouvé',
+    editProfile: 'Modifier le profil',
+    notifications: 'Notifications',
+    language: 'Langue',
+    currency: 'Devise',
+    privacy: 'Confidentialité et sécurité',
+    languageHint:
+      'Votre langue change instantanément dans l’application — aucun rechargement.',
+    currencyHint:
+      'Tous les prix se convertissent dans votre devise. Les vendeurs gardent la leur.',
+    current: 'Actuel',
+    signingOut: 'Déconnexion…',
   },
   es: {
     home: 'Inicio',
@@ -106,6 +132,7 @@ const WEB_TRANSLATIONS = {
     shop: 'Tienda',
     foodhub: 'Comida',
     profile: 'Perfil',
+    create: 'Crear',
     addToCart: 'Agregar al carrito',
     shopNow: 'Comprar ahora',
     bookNow: 'Reservar',
@@ -114,12 +141,24 @@ const WEB_TRANSLATIONS = {
     search: 'Buscar',
     settings: 'Ajustes',
     logout: 'Cerrar sesión',
+    signOut: 'Cerrar sesión',
     signIn: 'Iniciar sesión',
     signUp: 'Registrarse',
     orders: 'Pedidos',
     wallet: 'Billetera',
     loading: 'Cargando...',
     noProductsFound: 'No se encontraron productos',
+    editProfile: 'Editar perfil',
+    notifications: 'Notificaciones',
+    language: 'Idioma',
+    currency: 'Moneda',
+    privacy: 'Privacidad y seguridad',
+    languageHint:
+      'Tu idioma cambia al instante en la app — sin recargar.',
+    currencyHint:
+      'Todos los precios se convierten a tu moneda. Los vendedores mantienen la suya.',
+    current: 'Actual',
+    signingOut: 'Cerrando sesión…',
   },
   ar: {
     home: 'الرئيسية',
@@ -127,6 +166,7 @@ const WEB_TRANSLATIONS = {
     shop: 'تسوق',
     foodhub: 'طعام',
     profile: 'الملف',
+    create: 'إنشاء',
     addToCart: 'أضف إلى السلة',
     shopNow: 'تسوق الآن',
     bookNow: 'احجز الآن',
@@ -135,21 +175,40 @@ const WEB_TRANSLATIONS = {
     search: 'بحث',
     settings: 'الإعدادات',
     logout: 'تسجيل الخروج',
+    signOut: 'تسجيل الخروج',
     signIn: 'تسجيل الدخول',
     signUp: 'التسجيل',
     orders: 'الطلبات',
     wallet: 'المحفظة',
     loading: 'جاري التحميل...',
     noProductsFound: 'لم يتم العثور على منتجات',
+    editProfile: 'تعديل الملف',
+    notifications: 'الإشعارات',
+    language: 'اللغة',
+    currency: 'العملة',
+    privacy: 'الخصوصية والأمان',
+    languageHint: 'تتغير اللغة فوراً في التطبيق — دون إعادة تحميل.',
+    currencyHint:
+      'تُحوَّل كل الأسعار إلى عملتك المفضلة. يحتفظ البائعون بعملتهم.',
+    current: 'الحالي',
+    signingOut: 'جاري تسجيل الخروج…',
   },
 };
 
-// Module-scope date formatter — avoids hydration-unsafe Date construction in render
 function formatDateString(date) {
   const ts = typeof date === 'number' ? date : Date.parse(date);
   if (Number.isNaN(ts)) return '';
-  // en-GB locale renders as dd/mm/yyyy, matching the previous format
   return new Intl.DateTimeFormat('en-GB').format(ts);
+}
+
+function applyDocumentLanguage(lang) {
+  if (typeof document === 'undefined') return;
+  try {
+    document.documentElement.lang = lang || 'en';
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  } catch (_e) {
+    /* ignore */
+  }
 }
 
 export function useLocalization() {
@@ -158,19 +217,18 @@ export function useLocalization() {
   const [language, setLanguageState] = useState('en');
 
   useEffect(() => {
-    // Load from localStorage on client side
     if (typeof window !== 'undefined') {
       const syncFromStorage = () => {
         try {
-          // Use same key as CurrencyPrice component for consistency
           const savedCurrency = localStorage.getItem('currency');
           if (savedCurrency) {
             setCurrencyState(savedCurrency);
             setCurrencySymbol(CURRENCY_SYMBOLS[savedCurrency] || savedCurrency);
           }
 
-          const savedLang = localStorage.getItem('language');
-          if (savedLang) setLanguageState(savedLang);
+          const savedLang = localStorage.getItem('language') || 'en';
+          setLanguageState(savedLang);
+          applyDocumentLanguage(savedLang);
         } catch (e) {
           // use defaults
         }
@@ -178,10 +236,8 @@ export function useLocalization() {
 
       syncFromStorage();
 
-      // React instantly to same-tab changes (dispatched by settings pages)
       window.addEventListener('currency-changed', syncFromStorage);
       window.addEventListener('language-changed', syncFromStorage);
-      // React to changes from other tabs
       window.addEventListener('storage', syncFromStorage);
 
       return () => {
@@ -192,14 +248,14 @@ export function useLocalization() {
     }
   }, []);
 
-  // Setters that persist + broadcast so every mounted component updates instantly
   const setLanguage = (lang) => {
     try {
       localStorage.setItem('language', lang);
     } catch (e) {
-      // storage unavailable — still update in-memory state
+      /* storage unavailable */
     }
     setLanguageState(lang);
+    applyDocumentLanguage(lang);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('language-changed'));
     }
@@ -209,7 +265,7 @@ export function useLocalization() {
     try {
       localStorage.setItem('currency', code);
     } catch (e) {
-      // storage unavailable — still update in-memory state
+      /* storage unavailable */
     }
     setCurrencyState(code);
     setCurrencySymbol(CURRENCY_SYMBOLS[code] || code);
