@@ -26,7 +26,10 @@ export default function CartPage() {
   const updateQty = (index, delta) => {
     const next = cart.map((item, i) => {
       if (i !== index) return item;
-      const q = Math.max(1, (item.quantity || 1) + delta);
+      const maxStock = item.maxStock != null ? Number(item.maxStock) : 99;
+      let q = (item.quantity || 1) + delta;
+      if (q < 1) q = 1;
+      if (q > maxStock) q = maxStock;
       return { ...item, quantity: q };
     });
     persist(next);
@@ -74,21 +77,21 @@ export default function CartPage() {
           <>
             <div className="space-y-3 mb-6">
               {cart.map((item, index) => (
-                <div
-                  key={item.cartKey || item.id + '-' + index}
-                  className="glass border border-white/10 rounded-xl p-4 flex gap-4"
-                >
-                  <div className="w-20 h-20 rounded-lg bg-white/10 overflow-hidden shrink-0">
-                    {item.image ? (
-                      <img src={item.image} alt="" className="w-full h-full object-cover" />
-                    ) : null}
-                  </div>
+                <div key={item.cartKey || item.id || index} className="glass border border-white/10 rounded-xl p-3 flex gap-3">
+                  {item.image ? (
+                    <img src={item.image} alt="" className="w-20 h-20 rounded-lg object-cover bg-white/5" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-lg bg-white/5" />
+                  )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold truncate">{item.name}</p>
-                    {(item.selectedColor || item.selectedSize) && (
+                    <p className="font-semibold text-sm truncate">{item.name}</p>
+                    {(item.selectedSize || item.selectedColor) && (
                       <p className="text-white/45 text-xs mt-0.5">
-                        {[item.selectedColor, item.selectedSize].filter(Boolean).join(' · ')}
+                        {[item.selectedSize, item.selectedColor].filter(Boolean).join(' · ')}
                       </p>
+                    )}
+                    {item.maxStock != null && (
+                      <p className="text-white/35 text-[11px] mt-0.5">{item.maxStock} in stock</p>
                     )}
                     <div className="mt-2 flex items-center justify-between">
                       <CurrencyPrice
@@ -110,7 +113,8 @@ export default function CartPage() {
                         <button
                           type="button"
                           onClick={() => updateQty(index, 1)}
-                          className="w-7 h-7 rounded-full glass flex items-center justify-center"
+                          disabled={(item.quantity || 1) >= (item.maxStock != null ? Number(item.maxStock) : 99)}
+                          className="w-7 h-7 rounded-full glass flex items-center justify-center disabled:opacity-30"
                         >
                           <Plus size={14} />
                         </button>
