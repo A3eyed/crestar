@@ -8,17 +8,13 @@ import {
   MessageCircle,
   Share2,
   ShoppingBag,
-  Plus,
-  Check,
-  Play,
   Search,
   Volume2,
   VolumeX,
-  X,
-  Send,
   RefreshCw,
 } from 'lucide-react';
 import useUser from '@/utils/useUser';
+import useLocalization from '@/utils/useLocalization';
 import BottomNav from '@/components/BottomNav';
 
 const BRAND = '#D4AF37';
@@ -59,6 +55,7 @@ function resolveTaggedProduct(item) {
 
 export default function FeedPage() {
   const { data: user } = useUser();
+  const { t } = useLocalization();
   const [muted, setMuted] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef(null);
@@ -83,19 +80,19 @@ export default function FeedPage() {
         <div className="flex items-center justify-center relative h-14 px-4">
           <div className="flex items-center gap-5">
             <a href="/live/watch" className="text-white/60 text-[15px] font-semibold hover:text-white transition-colors">
-              LIVE
+              {t('live')}
             </a>
             <span className="text-white text-[16px] font-bold border-b-2 border-white pb-0.5">
-              For You
+              {t('forYou')}
             </span>
             <a href="/shop" className="text-white/60 text-[15px] font-semibold hover:text-white transition-colors">
-              Shop
+              {t('shop')}
             </a>
           </div>
           <a
             href="/search"
             className="absolute right-4 text-white hover:opacity-70 transition-opacity"
-            aria-label="Search"
+            aria-label={t('search')}
           >
             <Search size={22} />
           </a>
@@ -105,25 +102,25 @@ export default function FeedPage() {
       {isLoading ? (
         <div className="h-[100dvh] flex flex-col items-center justify-center gap-4">
           <div className="w-10 h-10 rounded-full border-2 border-white/20 animate-spin" style={{ borderTopColor: BRAND }} />
-          <p className="text-white/50 text-sm">Loading your feed...</p>
+          <p className="text-white/50 text-sm">{t('loadingFeed')}</p>
         </div>
       ) : error ? (
         <div className="h-[100dvh] flex flex-col items-center justify-center gap-4 px-6">
-          <p className="text-white/70 text-center">Could not load the feed. Please try again.</p>
+          <p className="text-white/70 text-center">{t('feedError')}</p>
           <button
             onClick={() => refetch()}
             className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-white"
             style={{ backgroundColor: BRAND }}
           >
             <RefreshCw size={16} className={isRefetching ? 'animate-spin' : ''} />
-            Retry
+            {t('retry')}
           </button>
         </div>
       ) : feedItems.length === 0 ? (
         <div className="h-[100dvh] flex flex-col items-center justify-center gap-4 px-6">
-          <p className="text-white/70 text-center">No videos yet. Follow creators or check back soon.</p>
+          <p className="text-white/70 text-center">{t('noVideos')}</p>
           <a href="/search" className="px-6 py-3 rounded-full font-bold text-black" style={{ backgroundColor: BRAND }}>
-            Find people
+            {t('findPeople')}
           </a>
         </div>
       ) : (
@@ -136,7 +133,6 @@ export default function FeedPage() {
             const videoUrl = item.videoUrl || item.video_url;
             const caption = item.caption || '';
             const username = item.username || item.creator_username || 'creator';
-            const displayName = item.displayName || item.display_name || username;
             const likes = item.likesCount ?? item.likes_count ?? 0;
             const comments = item.commentsCount ?? item.comments_count ?? 0;
             const tagged = resolveTaggedProduct(item);
@@ -166,7 +162,7 @@ export default function FeedPage() {
                   </button>
                   <button type="button" className="flex flex-col items-center gap-1 text-white">
                     <Share2 size={28} />
-                    <span className="text-xs">Share</span>
+                    <span className="text-xs">{t('share')}</span>
                   </button>
                   {tagged && (
                     <a
@@ -174,7 +170,7 @@ export default function FeedPage() {
                       className="flex flex-col items-center gap-1 text-white"
                     >
                       <ShoppingBag size={28} color={BRAND} />
-                      <span className="text-xs">Shop</span>
+                      <span className="text-xs">{t('shop')}</span>
                     </a>
                   )}
                 </div>
@@ -196,7 +192,7 @@ export default function FeedPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-white text-sm font-medium truncate">{tagged.name}</p>
                         <p className="text-sm font-bold" style={{ color: BRAND }}>
-                          {tagged.soldOut ? 'Sold out' : 'GHS ' + tagged.price.toFixed(2)}
+                          {tagged.soldOut ? t('soldOut') : 'GHS ' + tagged.price.toFixed(2)}
                         </p>
                       </div>
                     </a>
