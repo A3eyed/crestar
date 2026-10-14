@@ -9,9 +9,15 @@ const SITE_URL = 'https://crestarhq.com';
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
 
-  const publicRoutes: { path: string; changeFrequency: MetadataRoute.Sitemap[0]['changeFrequency']; priority: number }[] = [
+  const publicRoutes: {
+    path: string;
+    changeFrequency: MetadataRoute.Sitemap[0]['changeFrequency'];
+    priority: number;
+  }[] = [
     { path: '/', changeFrequency: 'hourly', priority: 1 },
     { path: '/shop', changeFrequency: 'hourly', priority: 0.95 },
+    { path: '/foodhub', changeFrequency: 'hourly', priority: 0.9 },
+    { path: '/monetization-center', changeFrequency: 'weekly', priority: 0.9 },
     { path: '/live/watch', changeFrequency: 'hourly', priority: 0.9 },
     { path: '/search', changeFrequency: 'daily', priority: 0.8 },
     { path: '/account/signup', changeFrequency: 'monthly', priority: 0.85 },
