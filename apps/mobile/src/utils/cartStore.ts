@@ -1,138 +1,128 @@
 // @ts-nocheck
 import { create } from 'zustand';
-import AsyncStorage from './safeStorage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Generate a unique cart item key based on product ID + variant selections
-const getCartItemKey = (product) => {
-  const parts = [product.id];
-  if (product.selectedColor) parts.push(`c:${product.selectedColor}`);
-  if (product.selectedSize) parts.push(`s:${product.selectedSize}`);
-  return parts.join('_');
-};
+const CART_STORAGE_KEY = '@crestar_cart';
 
-const useCartStore = create((set, get) => ({
+export const useCartStore = create((set, get) => ({
   items: [],
   totalItems: 0,
   totalPrice: 0,
-
-  // TikTok-style direct purchase: "Buy Now" bypasses the cart entirely.
-  // Holds a single item (with quantity) for the express checkout lane.
-  buyNowItem: null,
-
-  setBuyNowItem: (product, quantity = 1) => {
-    const cleanPrice =
-      typeof product.price === 'number' ? product.price : parseFloat(product.price) || 0;
-    const cartKey = getCartItemKey(product);
-    set({
-      buyNowItem: { ...product, price: cleanPrice, cartKey, quantity },
-    });
-  },
-
-  clearBuyNowItem: () => {
-    set({ buyNowItem: null });
-  },
-
-  // Add item to cart
-  addItem: async (product, quantity = 1) => {
-    const { items } = get();
-    const cartKey = getCartItemKey(product);
-    const existingIndex = items.findIndex((item) => getCartItemKey(item) === cartKey);
-
-    // CRITICAL FIX: Ensure price is a clean number to prevent price inflation
-    const cleanPrice =
-      typeof product.price === 'number' ? product.price : parseFloat(product.price) || 0;
-
-    let newItems;
-    if (existingIndex >= 0) {
-      newItems = [...items];
-      newItems[existingIndex].quantity += quantity;
-    } else {
-      newItems = [...items, { ...product, price: cleanPrice, cartKey, quantity }];
-    }
-
-    const totalItems = newItems.reduce((sum, item) => sum + item.quantity, 0);
-    const totalPrice = newItems.reduce((sum, item) => {
-      const itemPrice = typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0;
-      return sum + itemPrice * item.quantity;
-    }, 0);
-
-    set({ items: newItems, totalItems, totalPrice });
-    try {
-      await AsyncStorage.setItem('cart', JSON.stringify(newItems));
-    } catch (err) {
-      console.error('Failed to save cart:', err);
-    }
-  },
-
-  // Remove item from cart
-  removeItem: async (productId) => {
-    const { items } = get();
-    // Support removal by either productId or cartKey
-    const newItems = items.filter((item) => item.id !== productId && item.cartKey !== productId);
-
-    const totalItems = newItems.reduce((sum, item) => sum + item.quantity, 0);
-    const totalPrice = newItems.reduce((sum, item) => {
-      const itemPrice = typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0;
-      return sum + itemPrice * item.quantity;
-    }, 0);
-
-    set({ items: newItems, totalItems, totalPrice });
-    try {
-      await AsyncStorage.setItem('cart', JSON.stringify(newItems));
-    } catch (err) {
-      console.error('Failed to save cart:', err);
-    }
-  },
-
-  // Update quantity
-  updateQuantity: async (productId, quantity) => {
-    const { items } = get();
-    const newItems = items.map((item) =>
-      item.id === productId || item.cartKey === productId ? { ...item, quantity } : item
-    );
-
-    const totalItems = newItems.reduce((sum, item) => sum + item.quantity, 0);
-    const totalPrice = newItems.reduce((sum, item) => {
-      const itemPrice = typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0;
-      return sum + itemPrice * item.quantity;
-    }, 0);
-
-    set({ items: newItems, totalItems, totalPrice });
-    try {
-      await AsyncStorage.setItem('cart', JSON.stringify(newItems));
-    } catch (err) {
-      console.error('Failed to save cart:', err);
-    }
-  },
-
-  // Clear cart
-  clearCart: async () => {
-    set({ items: [], totalItems: 0, totalPrice: 0 });
-    try {
-      await AsyncStorage.removeItem('cart');
-    } catch (err) {
-      console.error('Failed to clear cart:', err);
-    }
-  },
+  isLoading: false,
 
   // Load cart from storage
   loadCart: async () => {
     try {
-      const stored = await AsyncStorage.getItem('cart');
+      set({ isLoading: true });
+      const stored = await AsyncStorage.getItem(CART_STORAGE_KEY);
       if (stored) {
         const items = JSON.parse(stored);
         const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
         const totalPrice = items.reduce((sum, item) => {
-          const itemPrice =
-            typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0;
+          const itemPrice = parseFloat(item.price) || 0;
           return sum + itemPrice * item.quantity;
         }, 0);
         set({ items, totalItems, totalPrice });
       }
     } catch (error) {
       console.error('Failed to load cart:', error);
+    } finally {
+      set({ isLoading: false });
     }
   },
-}));
 
-export default useCartStore;
+  // Add item to cart
+  addToCart: async (product, quantity = 1) => {
+    const { items } = get();
+    const cleanPrice = parseFloat(product.price) || 0;
+    const cartKey =
+      product.cartKey ||
+      [
+        product.id,
+        product.selectedColor && 'c:' + product.selectedColor,
+        product.selectedSize && 's:' + product.selectedSize,
+      ]
+        .filter(Boolean)
+        .join('_');
+
+    const existingIndex = items.findIndex(
+      (item) => item.cartKey === cartKey || item.id === product.id,
+    );
+
+    let newItems;
+    if (existingIndex >= 0) {
+      newItems = [...items];
+      const maxS = product.maxStock ?? product.stock ?? product.stock_quantity;
+      const next = newItems[existingIndex].quantity + quantity;
+      newItems[existingIndex].quantity = maxS != null ? Math.min(next, Number(maxS)) : next;
+      if (maxS != null) newItems[existingIndex].maxStock = Number(maxS);
+    } else {
+      const maxS = product.maxStock ?? product.stock ?? product.stock_quantity;
+      const qty = maxS != null ? Math.min(quantity, Number(maxS)) : quantity;
+      newItems = [
+        ...items,
+        {
+          ...product,
+          price: cleanPrice,
+          cartKey,
+          quantity: qty,
+          maxStock: maxS != null ? Number(maxS) : undefined,
+        },
+      ];
+    }
+
+    const totalItems = newItems.reduce((sum, item) => sum + item.quantity, 0);
+    const totalPrice = newItems.reduce((sum, item) => {
+      const itemPrice = parseFloat(item.price) || 0;
+      return sum + itemPrice * item.quantity;
+    }, 0);
+
+    set({ items: newItems, totalItems, totalPrice });
+    await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newItems));
+  },
+
+  // Remove item from cart
+  removeFromCart: async (productId) => {
+    const { items } = get();
+    const newItems = items.filter(
+      (item) => item.id !== productId && item.cartKey !== productId,
+    );
+    const totalItems = newItems.reduce((sum, item) => sum + item.quantity, 0);
+    const totalPrice = newItems.reduce((sum, item) => {
+      const itemPrice = parseFloat(item.price) || 0;
+      return sum + itemPrice * item.quantity;
+    }, 0);
+    set({ items: newItems, totalItems, totalPrice });
+    await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newItems));
+  },
+
+  // Update quantity
+  updateQuantity: async (productId, quantity, maxStock) => {
+    const cap = maxStock != null ? Number(maxStock) : null;
+    if (cap != null && quantity > cap) quantity = cap;
+    if (quantity < 1) quantity = 1;
+    const { items } = get();
+    const newItems = items.map((item) =>
+      item.id === productId || item.cartKey === productId
+        ? {
+            ...item,
+            quantity,
+            maxStock: cap != null ? cap : item.maxStock,
+          }
+        : item,
+    );
+    const totalItems = newItems.reduce((sum, item) => sum + item.quantity, 0);
+    const totalPrice = newItems.reduce((sum, item) => {
+      const itemPrice = parseFloat(item.price) || 0;
+      return sum + itemPrice * item.quantity;
+    }, 0);
+    set({ items: newItems, totalItems, totalPrice });
+    await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newItems));
+  },
+
+  // Clear cart
+  clearCart: async () => {
+    set({ items: [], totalItems: 0, totalPrice: 0 });
+    await AsyncStorage.removeItem(CART_STORAGE_KEY);
+  },
+}));
