@@ -38,7 +38,11 @@ export default function CheckoutPage() {
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
 
-  const regions = useMemo(() => (country ? getRegionsForCountry(country) : []), [country]);
+  const regions = useMemo(() => {
+    if (!country) return [];
+    const list = getRegionsForCountry(country);
+    return Array.isArray(list) ? list : [];
+  }, [country]);
   const countryMeta = country ? getCountryMeta(country) : null;
 
   // Filter regions as a city-search helper when the list is region-as-city style
@@ -78,113 +82,74 @@ export default function CheckoutPage() {
   }, [user, userLoading]);
 
   // When country changes, clear region/city so we never keep a mismatched place
-  const onCountryChange = (code) => {
-    setCountry(code);
+  useEffect(() => {
     setRegion('');
     setCity('');
     setCitySearch('');
-  };
+  }, [country]);
 
-  const onRegionChange = (value) => {
-    setRegion(value);
-    // If city was auto-copied from a previous region pick, clear it
-    if (city && city === region) setCity('');
-  };
+  useEffect(() => {
+    if (user?.name && !recipientName) {
+      setRecipientName(user.name);
+    }
+  }, [user?.name]);
 
-  const subtotal = cart.reduce(
-    (sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1),
-    0,
+  const subtotal = useMemo(
+    () =>
+      cart.reduce(
+        (sum, item) => sum + (parseFloat(item.price) || 0) * (item.quantity || 1),
+        0,
+      ),
+    [cart],
   );
 
-  const handlePlaceOrder = async () => {
+  const deliveryReady =
+    recipientName.trim() &&
+    country &&
+    (regions.length === 0 || region.trim()) &&
+    city.trim() &&
+    streetAddress.trim() &&
+    phoneNumber.trim();
+
+  const canPlace = cart.length > 0 && deliveryReady && !placing;
+
+  const placeOrder = async () => {
+    if (!canPlace) return;
+    setPlacing(true);
     setError('');
-    if (cart.length === 0) {
-      setError('Your cart is empty');
-      return;
-    }
 
-    const name = recipientName.trim();
-    const phone = phoneNumber.trim();
-    const street = streetAddress.trim();
-    const cityVal = city.trim();
-    const regionVal = region.trim();
-    const countryVal = country.trim();
-    const landmarkVal = landmark.trim();
-
-    if (!name) {
-      setError('Please enter the recipient name');
-      return;
-    }
-    if (!countryVal) {
-      setError('Please select your country');
-      return;
-    }
-    if (!regionVal) {
-      setError('Please select your region or state');
-      return;
-    }
-    if (!cityVal) {
-      setError('Please enter or select your city');
-      return;
-    }
-    if (!street) {
-      setError('Please enter your street address or house number');
-      return;
-    }
-    if (!phone) {
-      setError('Please enter a phone number for delivery');
-      return;
-    }
-    if (!landmarkVal) {
-      setError('Please enter a landmark closest to your location');
-      return;
-    }
-
-    // Payload uses ONLY buyer-entered fields — no defaults, no invented places
-    const deliveryAddress = {
-      address: street,
-      street: street,
-      city: cityVal,
-      region: regionVal,
-      country: countryVal,
-      countryName: countryMeta?.name || countryVal,
-      landmark: landmarkVal,
-      phone: phone,
-      recipientName: name,
+    const delivery_address = {
+      buyerName: recipientName.trim(),
+      country: countryMeta?.name || country,
+      countryCode: country,
+      region: region.trim() || null,
+      city: city.trim(),
+      address: streetAddress.trim(),
+      phone: phoneNumber.trim(),
+      landmark: landmark.trim() || null,
     };
 
-    setPlacing(true);
     try {
       const res = await fetch('/api/orders/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: cart,
-          deliveryAddress,
-          phoneNumber: phone,
-          recipientName: name,
-          landmark: landmarkVal,
-          city: cityVal,
-          region: regionVal,
-          country: countryVal,
-          callbackUrl: `${window.location.origin}/orders?verify=1`,
+          items: cart.map((it) => ({
+            productId: it.id || it.productId,
+            quantity: it.quantity || 1,
+            selectedColor: it.selectedColor || null,
+            selectedSize: it.selectedSize || null,
+            cartKey: it.cartKey || null,
+          })),
+          delivery_address,
+          mode: isBuyNow ? 'buynow' : 'cart',
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        if (
-          data?.unavailableItems &&
-          Array.isArray(data.unavailableItems) &&
-          data.unavailableItems.length > 0
-        ) {
-          if (isBuyNow) {
-            sessionStorage.removeItem('buy_now_item');
-            setCart([]);
-            setError(data.error || 'This item is no longer available.');
-            setPlacing(false);
-            return;
-          }
+        if (data.unavailableItems?.length) {
           const badIds = new Set(
             data.unavailableItems.flatMap((b) => [b.id, b.cartKey].filter(Boolean)),
           );
@@ -193,7 +158,7 @@ export default function CheckoutPage() {
           localStorage.setItem('cart', JSON.stringify(cleaned));
           setError(
             data.error ||
-              'Some items in your cart are no longer available and were removed. Please try again.',
+              'Some items are no longer available. Cart updated — review and try again.',
           );
           setPlacing(false);
           return;
@@ -202,305 +167,280 @@ export default function CheckoutPage() {
       }
 
       if (data.reference) {
-        local        localStorage.setItem('pending_payment_reference', data.reference);
+        localStorage.setItem('pending_payment_reference', data.reference);
         localStorage.setItem('pending_payment_buynow', isBuyNow ? '1' : '0');
       }
 
       if (data.paymentUrl) {
         window.location.href = data.paymentUrl;
-      } else {
-        window.location.href = '/orders';
+        return;
       }
-    } catch (err) {
-      setError(err.message || 'Checkout failed. Please try again.');
+
+      // Fallback: go to orders
+      if (isBuyNow) {
+        try {
+          sessionStorage.removeItem('buy_now_item');
+        } catch {}
+      } else {
+        localStorage.setItem('cart', '[]');
+      }
+      window.location.href = data.orderId ? `/orders?highlight=${data.orderId}` : '/orders';
+    } catch (e) {
+      setError(e?.message || 'Something went wrong. Please try again.');
       setPlacing(false);
     }
   };
 
-  if (userLoading || !loaded) {
+  if (!loaded || userLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div
-          className="w-12 h-12 border-4 border-white/20 border-t-[#D4AF37] rounded-full"
-          style={{ animation: 'checkout-spin 1s linear infinite' }}
-        />
-        <style jsx global>{`
-          @keyframes checkout-spin {
-            to {
-              transform: rotate(360deg);
-            }
-          }
-        `}</style>
+        <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-[#D4AF37] animate-spin" />
       </div>
     );
   }
 
   if (!user) return null;
 
-  if (cart.length === 0) {
-    return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-4 px-6">
-        <ShoppingBag size={56} className="text-white/20" />
-        <p className="text-white/60 text-lg">
-          {isBuyNow ? 'This item is no longer available' : 'Your cart is empty'}
-        </p>
-        <a
-          href="/shop"
-          className="bg-[#D4AF37] text-black px-6 py-3 rounded-xl font-bold hover:opacity-90"
-        >
-          Browse the Shop
-        </a>
-      </div>
-    );
-  }
-
-  const inputClass =
-    'w-full bg-white/5 border border-white/15 rounded-lg px-4 py-3 text-white placeholder-white/30 focus:border-[#D4AF37] focus:outline-none [&>option]:bg-black';
-
   return (
     <div className="min-h-screen bg-black text-white pb-32">
-      <div className="sticky top-0 z-20 bg-black border-b border-white/10">
-        <div className="max-w-xl mx-auto px-4 py-4 flex items-center gap-4">
-          <a
-            href={isBuyNow ? '/shop' : '/cart'}
-            className="w-10 h-10 bg-white/10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/20"
-          >
-            <ArrowLeft size={20} />
-          </a>
-          <h1 className="text-xl font-bold">Checkout</h1>
+      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl border-b border-white/10">
+        <div className="max-w-xl mx-auto px-4 py-3 flex items-center gap-3">
+          <button type="button" onClick={() => window.history.back()} className="p-1" aria-label="Back">
+            <ArrowLeft size={22} />
+          </button>
+          <h1 className="text-lg font-semibold">Checkout</h1>
         </div>
       </div>
 
-      <div className="max-w-xl mx-auto px-4 py-6 space-y-6">
-        {/* Order summary */}
-        <div>
-          <h2 className="font-bold text-lg mb-3">Your Items</h2>
-          <div className="space-y-2">
-            {cart.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl p-3"
-              >
-                {item.image ? (
-                  <img src={item.image} alt="" className="w-14 h-14 rounded-lg object-cover" />
-                ) : (
-                  <div className="w-14 h-14 rounded-lg bg-white/10 flex items-center justify-center">
-                    <ShoppingBag size={20} className="text-white/30" />
+      <div className="max-w-xl mx-auto px-4 py-4 space-y-5">
+        {/* Cart summary */}
+        <section className="glass border border-white/10 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ShoppingBag size={18} className="text-[#D4AF37]" />
+            <h2 className="font-semibold">Order</h2>
+            <span className="text-white/40 text-sm">{cart.length} item{cart.length === 1 ? '' : 's'}</span>
+          </div>
+          {cart.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-white/50 mb-3">Your cart is empty</p>
+              <a href="/shop" className="text-[#D4AF37] font-medium">
+                Continue shopping
+              </a>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {cart.map((item, index) => (
+                <div key={item.cartKey || item.id + '-' + index} className="flex gap-3">
+                  <div className="w-14 h-14 rounded-lg bg-white/10 overflow-hidden shrink-0">
+                    {item.image ? (
+                      <img src={item.image} alt="" className="w-full h-full object-cover" />
+                    ) : null}
                   </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{item.name}</p>
-                  <p className="text-white/50 text-xs">
-                    Qty: {item.quantity || 1}
-                    {item.selectedColor ? ` · ${item.selectedColor}` : ''}
-                    {item.selectedSize ? ` · ${item.selectedSize}` : ''}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate text-sm">{item.name}</p>
+                    {(item.selectedColor || item.selectedSize) && (
+                      <p className="text-white/40 text-xs">
+                        {[item.selectedColor, item.selectedSize].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
+                    <div className="flex justify-between mt-0.5">
+                      <span className="text-white/45 text-xs">Qty {item.quantity || 1}</span>
+                      <CurrencyPrice
+                        price={(parseFloat(item.price) || 0) * (item.quantity || 1)}
+                        originalCurrency={item.seller_currency || 'GHS'}
+                        showOriginal={false}
+                        size="small"
+                        textStyle={{ color: '#D4AF37', fontWeight: 600 }}
+                      />
+                    </div>
+                  </div>
                 </div>
+              ))}
+              <div className="border-t border-white/10 pt-3 flex justify-between">
+                <span className="text-white/60">Subtotal</span>
                 <CurrencyPrice
-                  price={(parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1)}
-                  originalCurrency={item.seller_currency || 'GHS'}
+                  price={subtotal}
+                  originalCurrency="GHS"
                   showOriginal={false}
                   size="small"
-                  textStyle={{ color: '#D4AF37', fontWeight: 'bold' }}
+                  textStyle={{ color: '#fff', fontWeight: 700 }}
                 />
               </div>
-            ))}
+              <p className="text-white/35 text-xs">Delivery fee calculated after address</p>
+            </div>
+          )}
+        </section>
+
+        {/* Delivery — buyer-only */}
+        <section className="glass border border-white/10 rounded-2xl p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <MapPin size={18} className="text-[#D4AF37]" />
+            <h2 className="font-semibold">Delivery details</h2>
           </div>
-        </div>
-
-        {/* Delivery details — buyer entered only */}
-        <div>
-          <h2 className="font-bold text-lg mb-1">Delivery Details</h2>
-          <p className="text-white/45 text-xs mb-4">
-            Enter the exact location where the order should be delivered. We only use what you type
-            here.
+          <p className="text-white/40 text-xs -mt-2">
+            Enter your real delivery location. Nothing is auto-filled or generated.
           </p>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">
-                Recipient Name <span className="text-[#D4AF37]">*</span>
-              </label>
-              <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3">
-                <UserIcon size={16} className="text-white/40" />
-                <input
-                  value={recipientName}
-                  onChange={(e) => setRecipientName(e.target.value)}
-                  placeholder="Who is receiving this order?"
-                  autoComplete="name"
-                  className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none"
-                />
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">
-                Country <span className="text-[#D4AF37]">*</span>
-              </label>
-              <select
-                value={country}
-                onChange={(e) => onCountryChange(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select country...</option>
-                {AFRICA_COUNTRIES.filter((c) => c.code !== 'GH_OTHER').map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <label className="block">
+            <span className="text-xs text-white/50 flex items-center gap-1 mb-1">
+              <UserIcon size={12} /> Full name
+            </span>
+            <input
+              type="text"
+              value={recipientName}
+              onChange={(e) => setRecipientName(e.target.value)}
+              placeholder="Who receives the order"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#D4AF37]/50"
+              autoComplete="name"
+            />
+          </label>
 
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">
-                Region / State <span className="text-[#D4AF37]">*</span>
-              </label>
+          <label className="block">
+            <span className="text-xs text-white/50 mb-1 block">Country</span>
+            <select
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#D4AF37]/50 appearance-none"
+            >
+              <option value="">Select country</option>
+              {AFRICA_COUNTRIES.filter((c) => c.code !== 'GH_OTHER').map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
+              ))}
+              <option value="GH_OTHER">Other African country</option>
+            </select>
+          </label>
+
+          {country && regions.length > 0 && (
+            <label className="block">
+              <span className="text-xs text-white/50 mb-1 block">Region / State</span>
               <select
                 value={region}
-                onChange={(e) => onRegionChange(e.target.value)}
-                disabled={!country}
-                className={inputClass + ' disabled:opacity-40'}
+                onChange={(e) => {
+                  setRegion(e.target.value);
+                  if (!city) setCity(e.target.value);
+                }}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#D4AF37]/50 appearance-none"
               >
-                <option value="">{country ? 'Select region or state...' : 'Select country first'}</option>
+                <option value="">Select region</option>
                 {regions.map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
                 ))}
               </select>
-            </div>
+            </label>
+          )}
 
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">
-                City <span className="text-[#D4AF37]">*</span>
-              </label>
-              <div className="relative">
-                <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3">
-                  <Search size={16} className="text-white/40" />
-                  <input
-                    value={city}
-                    onChange={(e) => {
-                      setCity(e.target.value);
-                      setCitySearch(e.target.value);
-                    }}
-                    onFocus={() => setCitySearch(city)}
-                    placeholder={region ? 'Type or search your city' : 'Select region first'}
-                    disabled={!region}
-                    autoComplete="address-level2"
-                    className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none disabled:opacity-40"
-                  />
-                </div>
-                {region && citySearch.trim() && filteredRegions.length > 0 && citySearch !== region && (
-                  <div className="absolute z-10 left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-[#1a1a1a] border border-white/15 rounded-lg shadow-xl">
-                    {filteredRegions.slice(0, 8).map((r) => (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => {
-                          setCity(r);
-                          setCitySearch('');
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-white/90 hover:bg-white/10"
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <p className="text-white/35 text-[11px] mt-1">
-                Type your city name, or pick a suggestion from the list.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">
-                Street address / house number <span className="text-[#D4AF37]">*</span>
-              </label>
-              <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3">
-                <MapPin size={16} className="text-white/40" />
-                <input
-                  value={streetAddress}
-                  onChange={(e) => setStreetAddress(e.target.value)}
-                  placeholder="Street, house number, or building"
-                  autoComplete="street-address"
-                  className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">
-                Phone Number <span className="text-[#D4AF37]">*</span>
-              </label>
-              <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3">
-                <Phone size={16} className="text-white/40" />
-                <input
-                  type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="Number the deliverer can call"
-                  autoComplete="tel"
-                  className="flex-1 bg-transparent py-3 text-white placeholder-white/30 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">
-                Landmark (closest to you) <span className="text-[#D4AF37]">*</span>
-              </label>
+          {country && regions.length === 0 && (
+            <label className="block">
+              <span className="text-xs text-white/50 mb-1 block">Region / State</span>
               <input
-                value={landmark}
-                onChange={(e) => setLandmark(e.target.value)}
-                placeholder="e.g. near Total station, opposite the big church"
-                className={inputClass}
+                type="text"
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+                placeholder="Type your region or state"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#D4AF37]/50"
               />
-              <p className="text-white/35 text-[11px] mt-1">
-                A nearby landmark helps the deliverer find you faster.
-              </p>
-            </div>
-          </div>
-        </div>
+            </label>
+          )}
 
-        <div className="flex items-start gap-3 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-xl p-4">
-          <Lock size={18} className="text-[#D4AF37] mt-0.5 shrink-0" />
-          <p className="text-white/70 text-sm">
-            Your payment is held securely and only released to the seller after you confirm
-            delivery. Delivery uses only the details you entered above.
-          </p>
-        </div>
+          <label className="block">
+            <span className="text-xs text-white/50 flex items-center gap-1 mb-1">
+              <Search size={12} /> City / Town
+            </span>
+            <input
+              type="text"
+              value={city}
+              onChange={(e) => {
+                setCity(e.target.value);
+                setCitySearch(e.target.value);
+              }}
+              placeholder="e.g. Accra, Lagos, Nairobi"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#D4AF37]/50"
+              autoComplete="address-level2"
+            />
+            {region && citySearch.trim() && filteredRegions.length > 0 && citySearch !== region && (
+              <div className="mt-1 rounded-xl border border-white/10 bg-black/80 max-h-36 overflow-y-auto">
+                {filteredRegions.slice(0, 8).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
+                    onClick={() => {
+                      setCity(r);
+                      setCitySearch(r);
+                      if (!region) setRegion(r);
+                    }}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            )}
+          </label>
+
+          <label className="block">
+            <span className="text-xs text-white/50 mb-1 block">Street address</span>
+            <input
+              type="text"
+              value={streetAddress}
+              onChange={(e) => setStreetAddress(e.target.value)}
+              placeholder="House number, street, area"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#D4AF37]/50"
+              autoComplete="street-address"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-xs text-white/50 flex items-center gap-1 mb-1">
+              <Phone size={12} /> Phone number
+            </span>
+            <input
+              type="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="Number for delivery contact"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#D4AF37]/50"
+              autoComplete="tel"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-xs text-white/50 mb-1 block">Landmark (optional)</span>
+            <input
+              type="text"
+              value={landmark}
+              onChange={(e) => setLandmark(e.target.value)}
+              placeholder="e.g. Near Accra Mall, opposite GT Bank"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#D4AF37]/50"
+            />
+          </label>
+        </section>
 
         {error && (
-          <div className="flex items-center gap-2 text-red-400 text-sm">
-            <AlertCircle size={16} />
-            {error}
+          <div className="flex gap-2 items-start rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-sm text-red-300">
+            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+            <p>{error}</p>
           </div>
         )}
+
+        <div className="flex items-center gap-2 text-white/35 text-xs px-1">
+          <Lock size={12} />
+          Payment is processed securely. You only pay after confirming delivery details.
+        </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-white/10">
-        <div className="max-w-xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-white/50 text-xs uppercase">Total</p>
-            <CurrencyPrice
-              price={subtotal}
-              originalCurrency={cart[0]?.seller_currency || 'GHS'}
-              showOriginal={false}
-              size="large"
-              textStyle={{
-                color: '#D4AF37',
-                fontSize: '1.5rem',
-                fontWeight: 'bold',
-              }}
-            />
-            <p className="text-white/40 text-xs">+ delivery fee if applicable</p>
-          </div>
+      <div className="fixed bottom-0 inset-x-0 z-20 border-t border-white/10 bg-black/95 backdrop-blur-xl">
+        <div className="max-w-xl mx-auto px-4 py-3">
           <button
-            onClick={handlePlaceOrder}
-            disabled={placing}
-            className="bg-[#D4AF37] text-black px-8 py-3.5 rounded-xl font-bold hover:opacity-90 disabled:opacity-40"
+            type="button"
+            disabled={!canPlace}
+            onClick={placeOrder}
+            className="w-full bg-[#D4AF37] text-black font-bold py-3.5 rounded-full disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {placing ? 'Processing...' : 'Pay Now'}
+            {placing ? 'Processing…' : 'Place order'}
           </button>
         </div>
       </div>
