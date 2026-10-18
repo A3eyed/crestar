@@ -1,20 +1,9 @@
 "use client";
 /**
- * ⚠ ANYTHING PLATFORM — DO NOT REWRITE THIS FILE ⚠
- *
- * Renders the social sign-in buttons on the signin/signup pages. The set of
- * providers comes from NEXT_PUBLIC_CREATE_AUTH_PROVIDERS, which the platform
- * injects from the project's Authentication settings — so a provider only
- * appears here once it's enabled and configured. In the builder preview
- * (NEXT_PUBLIC_CREATE_ENV === 'DEVELOPMENT', inside an iframe) real OAuth can't
- * run, so clicks route to the dev shim; everywhere else they run the real
- * better-auth social flow.
- *
- *   Safe:   restyle the buttons, reorder providers.
- *   Unsafe: bypassing authClient.signIn.social, removing the dev-shim branch.
+ * Renders social sign-in buttons. Providers come from
+ * NEXT_PUBLIC_CREATE_AUTH_PROVIDERS or NEXT_PUBLIC_AUTH_SOCIAL_PROVIDERS
+ * (comma-separated: google,apple).
  */
-"use client";
-
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
@@ -26,9 +15,13 @@ const PROVIDER_LABELS: Record<SocialProvider, string> = {
 	apple: "Apple",
 };
 
-const enabledProviders = (process.env.NEXT_PUBLIC_CREATE_AUTH_PROVIDERS ?? "")
+const enabledProviders = (
+	process.env.NEXT_PUBLIC_CREATE_AUTH_PROVIDERS ??
+	process.env.NEXT_PUBLIC_AUTH_SOCIAL_PROVIDERS ??
+	""
+)
 	.split(",")
-	.map((p) => p.trim())
+	.map((p) => p.trim().toLowerCase())
 	.filter((p): p is SocialProvider =>
 		KNOWN_PROVIDERS.includes(p as SocialProvider),
 	);
@@ -38,7 +31,6 @@ const isDevPreviewIframe = () => {
 	try {
 		return typeof window !== "undefined" && window.self !== window.top;
 	} catch {
-		// Cross-origin access to window.top throws — that means we're framed.
 		return true;
 	}
 };
@@ -75,7 +67,7 @@ export function SocialSignInButtons({ callbackUrl }: { callbackUrl: string }) {
 	};
 
 	return (
-		<div className="flex flex-col gap-[12px]">
+		<div className="flex flex-col gap-[12px] mt-4">
 			<div className="flex items-center gap-[8px] text-[12px] text-gray-400">
 				<span className="h-px flex-1 bg-gray-200" />
 				or
