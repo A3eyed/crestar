@@ -26,8 +26,7 @@
   //   npx wrangler secret put DATABASE_URL
   "vars": {
     "BETTER_AUTH_URL": "https://crestarhq.com",
-    "NEXT_PUBLIC_APP_URL": "https://crestarhq.com",
-    "NEXT_PUBLIC_CREATE_AUTH_PROVIDERS": "google,apple"
+    "NEXT_PUBLIC_APP_URL": "https://crestarhq.com"
   },
   "observability": {
     "enabled": true

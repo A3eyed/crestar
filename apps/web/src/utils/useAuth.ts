@@ -70,15 +70,6 @@ function useAuth() {
     [getCallbackUrl]
   );
 
-  const signInWithApple = useCallback(
-    (options: AuthOptions = {}) =>
-      authClient.signIn.social({
-        provider: 'apple',
-        callbackURL: getCallbackUrl(options),
-      }),
-    [getCallbackUrl]
-  );
-
   const signOut = useCallback(
     async (options: AuthOptions = {}) => {
       const callbackUrl = getCallbackUrl(options);
@@ -101,7 +92,6 @@ function useAuth() {
     signInWithGoogle,
     signInWithFacebook,
     signInWithTwitter,
-    signInWithApple,
     signOut,
   };
 }
