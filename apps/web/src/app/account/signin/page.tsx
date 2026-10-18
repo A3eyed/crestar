@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import useAuth from '@/utils/useAuth';
-import { SocialSignInButtons } from '@/components/SocialSignInButtons';
 import {
   getFriendlyAuthError,
   isMobileWebViewContext,
@@ -279,8 +278,6 @@ export default function SignInPage() {
           >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
-
-          <SocialSignInButtons callbackUrl={callbackUrl} />
 
           <div style={{ textAlign: 'center', marginTop: 2 }}>
             <a
