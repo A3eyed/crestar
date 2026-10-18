@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import useAuth from '@/utils/useAuth';
+import { SocialSignInButtons } from '@/components/SocialSignInButtons';
 import {
   getFriendlyAuthError,
   isMobileWebViewContext,
@@ -44,20 +45,19 @@ function getSafeCallbackUrl(value) {
 }
 
 export default function SignInPage() {
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [callbackUrl, setCallbackUrl] = useState<string>('/');
-  const [searchString, setSearchString] = useState<string>('');
-  const [isDark, setIsDark] = useState<boolean | null>(null);
-  const [isWebView, setIsWebView] = useState<boolean>(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [callbackUrl, setCallbackUrl] = useState('/');
+  const [searchString, setSearchString] = useState('');
+  const [isDark, setIsDark] = useState(null);
+  const [isWebView, setIsWebView] = useState(false);
 
   const { signInWithCredentials } = useAuth();
 
   useEffect(() => {
     try {
-      // Detect if we're in a mobile WebView (callbackUrl is the reliable signal)
       const inWebView = isMobileWebViewContext();
       setIsWebView(inWebView);
 
@@ -90,7 +90,6 @@ export default function SignInPage() {
         }
       } catch {}
       setIsDark(dark);
-      console.log('🎨 [SignIn] Theme:', dark ? 'dark' : 'light');
     } catch (e) {
       console.error('❌ [SignIn] Initialization error:', e);
       setIsDark(true);
@@ -98,7 +97,7 @@ export default function SignInPage() {
   }, []);
 
   const onSubmit = useCallback(
-    async (e: React.FormEvent<HTMLFormElement>) => {
+    async (e) => {
       e.preventDefault();
 
       const normalizedEmail = email.trim().toLowerCase();
@@ -125,9 +124,6 @@ export default function SignInPage() {
           return;
         }
 
-        // Confirm the session cookie is readable before navigating away.
-        // Without this the WebView can navigate to the bridge endpoint before
-        // the cookie jar has committed, which looks like a failed sign-in.
         const session = await waitForSession();
         if (!session) {
           setError("We signed you in but couldn't start your session. Please try again.");
@@ -135,8 +131,6 @@ export default function SignInPage() {
           return;
         }
 
-        // Re-check the native bridge at submit time — it is injected at
-        // document-end and may not have existed when the page mounted.
         const inWebView = isWebView || isMobileWebViewContext();
         const destination = inWebView
           ? EXPO_SUCCESS_PATH
@@ -145,16 +139,14 @@ export default function SignInPage() {
         window.location.href = destination;
       } catch (err) {
         console.error('[SignIn] Unexpected error:', err);
-        setError(getFriendlyAuthError(err as { message?: string }, 'signin'));
+        setError(getFriendlyAuthError(err, 'signin'));
         setLoading(false);
       }
     },
     [email, password, signInWithCredentials, callbackUrl, isWebView]
   );
 
-  // Show black while detecting theme — prevents white flash in dark WebView
   if (isDark === null) {
-    console.log('⏳ [SignIn] Waiting for theme detection...');
     return <div style={{ minHeight: '100vh', backgroundColor: '#000' }} />;
   }
 
@@ -287,6 +279,8 @@ export default function SignInPage() {
           >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
+
+          <SocialSignInButtons callbackUrl={callbackUrl} />
 
           <div style={{ textAlign: 'center', marginTop: 2 }}>
             <a
