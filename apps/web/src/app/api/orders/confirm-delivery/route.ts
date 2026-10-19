@@ -2,30 +2,24 @@
 import sql from '@/app/api/utils/sql';
 import { resolveUserId } from '@/app/api/utils/auth';
 import { releaseOrderEscrow } from '@/app/api/utils/orderSettlement';
-import { payoutOrderLegs, legsForOrder } from '@/app/api/utils/orderPayouts';
 import { notifyWithEmail } from '@/app/api/utils/notify';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * DELIVERY CONFIRMATION — the moment money is allowed to move
+ * DELIVERY CONFIRMATION — funds become withdrawable (no auto bank/MoMo send)
  * ─────────────────────────────────────────────────────────────────────────────
  *
  *   charge   → full amount sits in Crestar's Paystack balance (no charge-time
- *              split, because a split settles to the seller's subaccount
- *              instantly and could never be held).
+ *              split).
  *   webhook  → each party's share recorded as PENDING in the internal ledger.
  *   HERE     → buyer confirms with their 4-digit PIN:
- *                a) order → completed                (atomic compare-and-set)
- *                b) ledger Pending → Available       (releaseOrderEscrow)
- *                c) Paystack Transfers, one per leg  (payoutOrderLegs)
+ *                a) order → completed              (atomic compare-and-set)
+ *                b) ledger Pending → Available     (releaseOrderEscrow)
  *              Crestar retains only `orders.platform_fee`.
  *
- * ORDERING MATTERS: the ledger release happens *before* any transfer is
- * attempted, so if Paystack rejects a transfer the money is already sitting in
- * that person's Available balance and they can cash out manually. Money is
- * never lost and never invented.
- *
- * A failed payout never fails this request.
+ * Money is NOT transferred to bank/MoMo at confirmation time. Recipients cash
+ * out manually from Available balance, or receive funds later only if they
+ * enabled a payout schedule (processed by the scheduled-payouts cron).
  */
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -182,6 +176,7 @@ export async function POST(request) {
       UPDATE orders
       SET status = 'completed',
           payment_status = 'paid',
+          payout_status = 'retained',
           delivered_at = COALESCE(delivered_at, ${now}),
           completed_at = ${now},
           updated_at = ${now}
@@ -203,38 +198,24 @@ export async function POST(request) {
     `;
 
     // ── 2. Ledger: Pending → Available for every party on this order ───────
+    // No Paystack transfer here. Users withdraw manually, or via payout schedule.
     const release = await releaseOrderEscrow(updatedOrder);
     console.log(
-      `🔓 Order ${updatedOrder.order_number} escrow release:`,
+      `🔓 Order ${updatedOrder.order_number} escrow release (wallet only, no auto-transfer):`,
       release.released ? release.moved : release.reason || release.error
     );
 
-    // ── 3. Push the real money out, one Paystack Transfer per leg ──────────
-    // Never allowed to fail the request: anything that doesn't go out stays
-    // withdrawable in the recipient's Available balance.
-    let payoutSummary = { payoutStatus: 'skipped', results: [], legs: [] };
-    try {
-      payoutSummary = await payoutOrderLegs(updatedOrder);
-      console.log(
-        `💸 Order ${updatedOrder.order_number} payout: ${payoutSummary.payoutStatus}`,
-        payoutSummary.results
-      );
-    } catch (payoutErr) {
-      console.error('Auto-payout failed (funds remain withdrawable):', payoutErr);
-      payoutSummary.legs = await legsForOrder(orderId).catch(() => []);
-    }
-
-    // ── 4. Tell the seller ─────────────────────────────────────────────────
+    // ── 3. Notify seller — funds are in wallet Available for cashout ───────
     try {
       const amount = parseFloat(updatedOrder.seller_payout || 0).toFixed(2);
       const currency = updatedOrder.currency || 'GHS';
       await notifyWithEmail({
         userId: updatedOrder.seller_id,
         type: 'payment_released',
-        title: '💰 Payment released',
-        body: `Order ${updatedOrder.order_number} was confirmed by the buyer. ${currency} ${amount} is now available in your wallet.`,
+        title: '💰 Funds available in your wallet',
+        body: `Order ${updatedOrder.order_number} was confirmed by the buyer. ${currency} ${amount} is now in your Available balance. Cash out anytime, or use a payout schedule if you have one enabled.`,
         data: { order_id: updatedOrder.id, amount, currency },
-        emailSubject: `Payment released for order ${updatedOrder.order_number}`,
+        emailSubject: `Funds available for order ${updatedOrder.order_number}`,
       });
     } catch (notifyErr) {
       console.error('Release notification failed:', notifyErr);
@@ -243,9 +224,15 @@ export async function POST(request) {
     return Response.json({
       success: true,
       order: updatedOrder,
-      message: 'Delivery confirmed! Payment released to seller.',
+      message:
+        'Delivery confirmed. Payment is available in the wallet for manual cashout (or scheduled payout if enabled).',
       escrow: release,
-      payout: payoutSummary,
+      payout: {
+        payoutStatus: 'retained',
+        results: [],
+        legs: [],
+        note: 'No automatic bank/MoMo transfer on delivery confirm. Withdraw from Available balance or enable a payout schedule.',
+      },
     });
   } catch (error) {
     console.error('Confirm delivery error:', error);
