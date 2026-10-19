@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import useUser from '@/utils/useUser';
 import CurrencyPrice from '@/components/CurrencyPrice';
 import SellerAnalytics from '@/components/SellerAnalytics';
+import SellerDeliverySettings from '@/components/SellerDeliverySettings';
 import {
   ArrowLeft,
   Package,
@@ -14,6 +15,7 @@ import {
   Trash2,
   Megaphone,
   X,
+  Truck,
 } from 'lucide-react';
 
 const COMMISSION_OPTIONS = [5, 10, 15, 20, 25, 30];
@@ -127,6 +129,7 @@ export default function SellerDashboardPage() {
   const tabs = [
     { id: 'products', label: 'Products', icon: Package },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
+    { id: 'delivery', label: 'Delivery', icon: Truck },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   ];
 
@@ -150,7 +153,7 @@ export default function SellerDashboardPage() {
             <Plus size={16} /> New
           </a>
         </div>
-        <div className="max-w-3xl mx-auto flex border-t border-white/10">
+        <div className="max-w-3xl mx-auto flex border-t border-white/10 overflow-x-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = selectedTab === tab.id;
@@ -160,14 +163,14 @@ export default function SellerDashboardPage() {
                 type="button"
                 onClick={() => setSelectedTab(tab.id)}
                 className={
-                  'flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold border-b-2 ' +
+                  'flex-1 min-w-[4.5rem] flex items-center justify-center gap-1.5 py-3.5 text-sm font-semibold border-b-2 ' +
                   (isActive
                     ? 'border-[#D4AF37] text-white'
                     : 'border-transparent text-white/45')
                 }
               >
                 <Icon size={16} />
-                {tab.label}
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             );
           })}
@@ -306,6 +309,8 @@ export default function SellerDashboardPage() {
             )}
           </div>
         )}
+
+        {selectedTab === 'delivery' && <SellerDeliverySettings />}
 
         {selectedTab === 'analytics' && <SellerAnalytics />}
       </div>
