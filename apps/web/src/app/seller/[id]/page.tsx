@@ -18,9 +18,8 @@ import {
 } from 'lucide-react';
 
 /**
- * Public profile page — works for BOTH regular users and sellers,
- * exactly like TikTok: videos grid first, shop tab if they sell,
- * follow/message actions, and playable videos via /video/:id.
+ * Public profile — TikTok-style for any user (handle or id).
+ * Own profile → Edit Profile; others → Follow + Message (opens DM).
  */
 export default function PublicProfilePage() {
   const { data: user } = useUser();
@@ -33,15 +32,17 @@ export default function PublicProfilePage() {
   const [selectedTab, setSelectedTab] = useState('videos');
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
-  const [profileId, setProfileId] = useState(null);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [resolvedUserId, setResolvedUserId] = useState(null);
   const [deletingVideoId, setDeletingVideoId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
 
-  const fetchAll = useCallback(async (id) => {
+  const fetchAll = useCallback(async (pathKey) => {
     try {
       setLoading(true);
-      // Profile (works for sellers AND regular users)
-      const res = await fetch(`/api/sellers/${id}`);
+      setNotFound(false);
+
+      const res = await fetch(`/api/sellers/${encodeURIComponent(pathKey)}`);
       if (!res.ok) {
         setNotFound(true);
         return;
@@ -51,19 +52,29 @@ export default function PublicProfilePage() {
         setNotFound(true);
         return;
       }
+
+      const uid = String(data.profile.user_id || '');
       setProfile(data.profile);
       setProducts(data.products || []);
       setServices(data.services || []);
-      setFollowerCount(data.profile?.stats?.followers || 0);
+      setResolvedUserId(uid);
+      setFollowerCount(
+        data.profile?.stats?.followers ?? data.profile?.followers_count ?? 0,
+      );
+      setFollowingCount(
+        data.profile?.stats?.following ?? data.profile?.following_count ?? 0,
+      );
 
-      // Videos (TikTok-style grid)
-      try {
-        const vidsRes = await fetch(`/api/videos/user/${id}`);
-        if (vidsRes.ok) {
-          const vidsData = await vidsRes.json();
-          setVideos(vidsData.videos || []);
-        }
-      } catch (e) {}
+      // Always load videos by resolved user id (not raw handle)
+      if (uid) {
+        try {
+          const vidsRes = await fetch(`/api/videos/user/${encodeURIComponent(uid)}`);
+          if (vidsRes.ok) {
+            const vidsData = await vidsRes.json();
+            setVideos(vidsData.videos || []);
+          }
+        } catch (e) {}
+      }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
       setNotFound(true);
@@ -73,28 +84,33 @@ export default function PublicProfilePage() {
   }, []);
 
   useEffect(() => {
-    const pathParts = window.location.pathname.split('/');
-    const id = pathParts[pathParts.length - 1];
-    if (id) {
-      setProfileId(id);
-      fetchAll(id);
-    }
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    // /seller/<id> or /<username>
+    const key =
+      pathParts[0] === 'seller' ? pathParts[1] : pathParts[pathParts.length - 1];
+    if (key) fetchAll(key);
   }, [fetchAll]);
 
-  // Check follow status (persisted, like mobile)
   useEffect(() => {
-    if (!user || !profileId) return;
-    fetch(`/api/follows?targetId=${profileId}`)
+    if (!user || !resolvedUserId) return;
+    if (String(user.id) === String(resolvedUserId)) return;
+    fetch(`/api/follows?targetId=${encodeURIComponent(resolvedUserId)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data) setIsFollowing(!!data.following);
+        if (data) {
+          setIsFollowing(!!data.following);
+          if (typeof data.followersCount === 'number') {
+            setFollowerCount(data.followersCount);
+          }
+        }
       })
       .catch(() => {});
-  }, [user, profileId]);
+  }, [user, resolvedUserId]);
 
   const handleFollow = async () => {
+    if (!resolvedUserId) return;
     if (!user) {
-      const handle = profile?.username || profileId;
+      const handle = profile?.username || resolvedUserId;
       window.location.href = `/account/signin?callbackUrl=/${handle}`;
       return;
     }
@@ -102,19 +118,26 @@ export default function PublicProfilePage() {
       const res = await fetch('/api/follows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetId: profileId }),
+        credentials: 'include',
+        body: JSON.stringify({ targetId: resolvedUserId }),
       });
       if (res.ok) {
         const data = await res.json();
         setIsFollowing(!!data.following);
-        setFollowerCount((prev) => (data.following ? prev + 1 : Math.max(0, prev - 1)));
+        if (typeof data.followersCount === 'number') {
+          setFollowerCount(data.followersCount);
+        } else {
+          setFollowerCount((prev) =>
+            data.following ? prev + 1 : Math.max(0, prev - 1),
+          );
+        }
       }
     } catch (e) {}
   };
 
   const handleDeleteVideo = async (videoId) => {
     const confirmed = window.confirm(
-      'Delete video?\n\nThis video will be moved to Recently deleted. You can restore it within 30 days from your profile menu.'
+      'Delete video?\n\nThis video will be moved to Recently deleted. You can restore it within 30 days from your profile menu.',
     );
     if (!confirmed) return;
 
@@ -125,9 +148,7 @@ export default function PublicProfilePage() {
         method: 'DELETE',
       });
       if (!res.ok) {
-        throw new Error(
-          `When calling /api/videos/delete, the response was [${res.status}] ${res.statusText}`
-        );
+        throw new Error(`Delete failed [${res.status}]`);
       }
       setVideos((prev) => prev.filter((v) => v.id !== videoId));
     } catch (err) {
@@ -139,8 +160,7 @@ export default function PublicProfilePage() {
   };
 
   const handleShare = async () => {
-    // Clean, shareable handle URL: crestarhq.com/username
-    const handle = profile?.username || profileId;
+    const handle = profile?.username || resolvedUserId;
     const url = `${window.location.origin}/${handle}`;
     if (navigator.share) {
       try {
@@ -150,6 +170,17 @@ export default function PublicProfilePage() {
       await navigator.clipboard.writeText(url);
       alert('Profile link copied!');
     }
+  };
+
+  const openMessage = () => {
+    if (!resolvedUserId) return;
+    if (!user) {
+      const handle = profile?.username || resolvedUserId;
+      window.location.href = `/account/signin?callbackUrl=/inbox?userId=${encodeURIComponent(resolvedUserId)}`;
+      return;
+    }
+    // TikTok-style: open DM with this person immediately
+    window.location.href = `/inbox?userId=${encodeURIComponent(resolvedUserId)}`;
   };
 
   if (loading) {
@@ -186,14 +217,14 @@ export default function PublicProfilePage() {
   }
 
   const isSellerProfile = !!profile.is_seller;
-  // Always prefer the officially registered business name (TikTok Shop style)
   const displayName =
     profile.display_business_name ||
     profile.business_name ||
     profile.display_name ||
     `@${profile.username}`;
   const allShopItems = [...products, ...services];
-  const isOwnProfile = user && String(user.id) === String(profile.user_id || profileId);
+  const isOwnProfile =
+    user && resolvedUserId && String(user.id) === String(resolvedUserId);
 
   const tabs = [
     { id: 'videos', icon: Grid3X3, label: 'Videos' },
@@ -204,7 +235,6 @@ export default function PublicProfilePage() {
 
   return (
     <div className="min-h-screen bg-black text-white pb-24">
-      {/* Header */}
       <div className="sticky top-0 z-20 bg-black/90 backdrop-blur border-b border-white/10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
@@ -224,7 +254,6 @@ export default function PublicProfilePage() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4">
-        {/* Profile info — TikTok layout */}
         <div className="flex flex-col items-center pt-6">
           <div className="w-24 h-24 rounded-full overflow-hidden bg-white/10 border border-white/15 flex items-center justify-center mb-3">
             {profile.profile_image ? (
@@ -246,8 +275,11 @@ export default function PublicProfilePage() {
           </div>
           <p className="text-white/50 text-sm mb-4">@{profile.username}</p>
 
-          {/* Stats */}
           <div className="flex items-center gap-10 mb-4">
+            <div className="text-center">
+              <p className="font-bold text-lg">{followingCount}</p>
+              <p className="text-white/50 text-xs">Following</p>
+            </div>
             <div className="text-center">
               <p className="font-bold text-lg">{followerCount}</p>
               <p className="text-white/50 text-xs">Followers</p>
@@ -256,23 +288,32 @@ export default function PublicProfilePage() {
               <p className="font-bold text-lg">{videos.length}</p>
               <p className="text-white/50 text-xs">Videos</p>
             </div>
-            {isSellerProfile && (
-              <div className="text-center">
-                <p className="font-bold text-lg">{allShopItems.length}</p>
-                <p className="text-white/50 text-xs">Products</p>
-              </div>
-            )}
           </div>
 
-          {/* Bio */}
           {profile.bio && (
             <p className="text-white/80 text-sm text-center max-w-sm mb-5">{profile.bio}</p>
           )}
 
-          {/* Actions */}
-          {!isOwnProfile && (
+          {/* TikTok: own profile shows Edit; others Follow + Message */}
+          {isOwnProfile ? (
+            <div className="flex items-center gap-2 w-full max-w-sm mb-6">
+              <a
+                href="/edit-profile"
+                className="flex-1 bg-white/10 border border-white/15 py-2.5 rounded-lg font-semibold text-sm text-center hover:bg-white/20"
+              >
+                Edit profile
+              </a>
+              <a
+                href="/profile"
+                className="flex-1 bg-white/10 border border-white/15 py-2.5 rounded-lg font-semibold text-sm text-center hover:bg-white/20"
+              >
+                My profile
+              </a>
+            </div>
+          ) : (
             <div className="flex items-center gap-2 w-full max-w-sm mb-6">
               <button
+                type="button"
                 onClick={handleFollow}
                 className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-colors ${
                   isFollowing
@@ -282,18 +323,18 @@ export default function PublicProfilePage() {
               >
                 {isFollowing ? 'Following' : 'Follow'}
               </button>
-              <a
-                href="/inbox"
+              <button
+                type="button"
+                onClick={openMessage}
                 className="flex-1 bg-white/10 border border-white/15 py-2.5 rounded-lg font-semibold text-sm text-center hover:bg-white/20 flex items-center justify-center gap-2"
               >
                 <MessageCircle size={16} />
                 Message
-              </a>
+              </button>
             </div>
           )}
         </div>
 
-        {/* Tabs */}
         <div className="flex border-b border-white/10 mb-1">
           {tabs.map((tab) => {
             const TabIcon = tab.icon;
@@ -301,6 +342,7 @@ export default function PublicProfilePage() {
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setSelectedTab(tab.id)}
                 className="flex-1 py-3 flex items-center justify-center relative"
               >
@@ -313,7 +355,6 @@ export default function PublicProfilePage() {
           })}
         </div>
 
-        {/* Videos tab — grid, tap to play (TikTok style) */}
         {selectedTab === 'videos' && (
           <div>
             {deleteError && <p className="text-red-400 text-sm text-center py-3">{deleteError}</p>}
@@ -385,7 +426,6 @@ export default function PublicProfilePage() {
           </div>
         )}
 
-        {/* Shop tab */}
         {selectedTab === 'shop' && (
           <div>
             {allShopItems.length === 0 ? (
@@ -414,7 +454,7 @@ export default function PublicProfilePage() {
                     >
                       {image ? (
                         <img
-                          src={image}
+                          src={typeof image === 'string' ? image : image?.url}
                           alt={item.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         />
