@@ -23,7 +23,6 @@ import {
   TrendingUp,
   Truck,
   Plus,
-  Bell,
 } from 'lucide-react';
 
 const shell = 'min-h-screen bg-black text-white';
@@ -185,7 +184,6 @@ export default function ProfilePage() {
     })();
   }, [user?.id, fetchPosts]);
 
-  // Inbox badge stays until a conversation is opened (API marks messages read)
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
@@ -214,7 +212,6 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
-
     (async () => {
       setLoadingTab(true);
       try {
@@ -249,7 +246,6 @@ export default function ProfilePage() {
         if (!cancelled) setLoadingTab(false);
       }
     })();
-
     return () => {
       cancelled = true;
     };
@@ -290,8 +286,7 @@ export default function ProfilePage() {
     ...(isAdmin
       ? [{ label: t('admin'), icon: Shield, href: '/admin/dashboard', badge: 0 }]
       : []),
-    { label: t('inbox'), icon: Inbox, href: '/inbox', badge: unreadMessages },
-    { label: 'Notifications', icon: Bell, href: '/notifications', badge: unreadActivity },
+    { label: t('inbox'), icon: Inbox, href: '/inbox', badge: unreadMessages + unreadActivity },
     { label: t('orders'), icon: Package, href: '/orders' },
     { label: t('wallet'), icon: Wallet, href: '/wallet' },
     { ...monetizationItem, badge: centerBadge },
@@ -530,7 +525,7 @@ export default function ProfilePage() {
             {loadingTab ? (
               <GridSkeleton />
             ) : saved.length === 0 ? (
-              <EmptyState icon={Bookmark} title={t('noSavedVideos') || 'No saved videos'} subtitle={t('noSavedSubtitle') || ''} />
+              <EmptyState icon={Bookmark} title={t('noSavedVideos')} subtitle={t('noSavedSubtitle')} />
             ) : (
               <div className="grid grid-cols-3 gap-0.5">
                 {saved.map((video) => (
@@ -549,16 +544,25 @@ export default function ProfilePage() {
       </div>
 
       {showDrawer && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <button type="button" className="absolute inset-0 bg-black/60" onClick={() => setShowDrawer(false)} aria-label="Close" />
-          <div className="relative w-full max-w-xs bg-black border-l border-white/10 h-full overflow-y-auto">
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
-              <span className="font-bold">Menu</span>
-              <button type="button" onClick={() => setShowDrawer(false)} className="text-white/60 text-sm">
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowDrawer(false)}
+            aria-label="Close menu"
+          />
+          <div className="absolute top-0 right-0 bottom-0 w-[min(100%,320px)] bg-black border-l border-white/10 flex flex-col">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
+              <h2 className="text-lg font-bold">Menu</h2>
+              <button
+                type="button"
+                onClick={() => setShowDrawer(false)}
+                className="text-white/60 text-sm"
+              >
                 Close
               </button>
             </div>
-            <div className="p-2">
+            <div className="flex-1 overflow-y-auto px-2 py-2">
               {drawerItems.map((item) => {
                 const Icon = item.icon;
                 const badge = Number(item.badge) || 0;
