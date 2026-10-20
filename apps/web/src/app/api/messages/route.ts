@@ -2,10 +2,18 @@
 import sql from '@/app/api/utils/sql';
 import { resolveUserId } from '@/app/api/utils/auth';
 import { createNotification, notifyWithEmail, getUserDisplayName } from '@/app/api/utils/notify';
+import { getSupportAccount } from '@/app/api/utils/support';
 
 function getConversationId(userId1, userId2) {
   const sorted = [String(userId1), String(userId2)].sort();
   return `conv_${sorted[0]}_${sorted[1]}`;
+}
+
+function isCrestarPartner(partner) {
+  if (!partner) return false;
+  if (partner.is_system_account) return true;
+  const handle = String(partner.username || '').toLowerCase();
+  return handle === 'crestar' || handle === 'crestarhq' || handle === 'support';
 }
 
 async function resolvePartnerId(raw) {
@@ -21,6 +29,7 @@ async function resolvePartnerId(raw) {
 }
 
 // GET /api/messages?partnerId=XX — fetch messages with a specific user
+// GET /api/messages?conversationId=support_… — open a known thread
 // GET /api/messages — conversation list (newest first)
 export async function GET(request) {
   try {
@@ -32,9 +41,9 @@ export async function GET(request) {
 
     const url = new URL(request.url);
     const partnerParam = url.searchParams.get('partnerId') || url.searchParams.get('userId');
+    const conversationParam = url.searchParams.get('conversationId');
 
-    if (!partnerParam) {
-      // Conversation list — order by last message time (TikTok-style)
+    if (!partnerParam && !conversationParam) {
       const conversations = await sql(
         `WITH latest AS (
            SELECT DISTINCT ON (m.conversation_id)
@@ -53,10 +62,10 @@ export async function GET(request) {
          SELECT
            l.*,
            u.username AS partner_username,
-           COALESCE(u.display_name, u.name) AS partner_display_name,
+           COALESCE(u.display_name, u.name, u.username) AS partner_display_name,
            u.profile_image AS partner_avatar,
            u.is_verified AS partner_verified,
-           u.is_system_account AS partner_system,
+           COALESCE(u.is_system_account, false) AS partner_system,
            (SELECT COUNT(*)::int FROM messages
              WHERE conversation_id = l.conversation_id
                AND receiver_user_id = $1 AND is_read = false) AS unread_count
@@ -66,7 +75,63 @@ export async function GET(request) {
         [me],
       );
 
-      return Response.json({ conversations });
+      // Normalize Crestar / system threads for the UI
+      const normalized = (conversations || []).map((c) => {
+        const isSupport =
+          String(c.conversation_id || '').startsWith('support_') ||
+          c.partner_system;
+        if (!isSupport) return c;
+        return {
+          ...c,
+          partner_display_name: c.partner_display_name || 'Crestar',
+          partner_username: c.partner_username || 'crestar',
+          partner_system: true,
+        };
+      });
+
+      return Response.json({ conversations: normalized });
+    }
+
+    // Direct conversation id (admin/support deep links)
+    if (conversationParam && !partnerParam) {
+      const cid = String(conversationParam);
+      // Users may only open their own support thread; agents use /api/support/chat
+      if (cid.startsWith('support_') && cid !== `support_${me}`) {
+        return Response.json({ error: 'Access denied' }, { status: 403 });
+      }
+      const messages = await sql(
+        `SELECT m.*,
+          su.username AS sender_username,
+          COALESCE(su.display_name, su.name) AS sender_display_name,
+          su.is_verified AS sender_verified,
+          su.is_system_account AS sender_system
+        FROM messages m
+        LEFT JOIN auth_users su ON su.id::text = m.sender_user_id
+        WHERE m.conversation_id = $1
+        ORDER BY m.created_at ASC
+        LIMIT 200`,
+        [cid],
+      );
+      await sql(
+        `UPDATE messages SET is_read = true
+         WHERE conversation_id = $1 AND receiver_user_id = $2 AND is_read = false`,
+        [cid, me],
+      );
+      const support = await getSupportAccount();
+      return Response.json({
+        messages,
+        conversationId: cid,
+        partner: support
+          ? {
+              id: String(support.id),
+              username: support.username || 'crestar',
+              display_name: support.business_name || support.display_name || 'Crestar',
+              profile_image: support.profile_image,
+              is_verified: true,
+              is_system_account: true,
+            }
+          : null,
+      });
     }
 
     const partner = await resolvePartnerId(partnerParam);
@@ -74,13 +139,12 @@ export async function GET(request) {
       return Response.json({ error: 'User not found' }, { status: 404 });
     }
     const partnerId = String(partner.id);
+    const peerConv = getConversationId(me, partnerId);
+    const supportConv = `support_${me}`;
+    const isSupport = isCrestarPartner(partner);
 
-    // Support thread with @Crestar uses support_<userId>
-    let conversationId = getConversationId(me, partnerId);
-    if (partner.is_system_account || String(partner.username || '').toLowerCase() === 'crestar') {
-      conversationId = `support_${me}`;
-    }
-
+    // Pull every message between the two parties OR the support thread.
+    // This fixes empty threads when conversation_id was support_* vs conv_*.
     const messages = await sql(
       `SELECT m.*,
         su.username AS sender_username,
@@ -89,40 +153,75 @@ export async function GET(request) {
         su.is_system_account AS sender_system
       FROM messages m
       LEFT JOIN auth_users su ON su.id::text = m.sender_user_id
-      WHERE m.conversation_id = $1
-         OR (m.conversation_id = $2)
+      WHERE
+        m.conversation_id = $1
+        OR m.conversation_id = $2
+        OR (
+          (m.sender_user_id = $3 AND m.receiver_user_id = $4)
+          OR (m.sender_user_id = $4 AND m.receiver_user_id = $3)
+        )
       ORDER BY m.created_at ASC
-      LIMIT 200`,
-      [conversationId, getConversationId(me, partnerId)],
+      LIMIT 300`,
+      [peerConv, isSupport ? supportConv : peerConv, me, partnerId],
     );
 
-    // Deduplicate if both ids matched somehow
-    const seen = new Set();
-    const unique = [];
-    for (const m of messages) {
-      if (seen.has(m.id)) continue;
-      seen.add(m.id);
-      unique.push(m);
+    // If partner is Crestar, also force-include support_${me} even when ids differ
+    let merged = messages || [];
+    if (isSupport) {
+      const supportOnly = await sql(
+        `SELECT m.*,
+          su.username AS sender_username,
+          COALESCE(su.display_name, su.name) AS sender_display_name,
+          su.is_verified AS sender_verified,
+          su.is_system_account AS sender_system
+        FROM messages m
+        LEFT JOIN auth_users su ON su.id::text = m.sender_user_id
+        WHERE m.conversation_id = $1
+        ORDER BY m.created_at ASC
+        LIMIT 300`,
+        [supportConv],
+      );
+      const byId = new Map();
+      for (const m of [...merged, ...(supportOnly || [])]) {
+        byId.set(m.id, m);
+      }
+      merged = Array.from(byId.values()).sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at),
+      );
+    } else {
+      const seen = new Set();
+      merged = [];
+      for (const m of messages || []) {
+        if (seen.has(m.id)) continue;
+        seen.add(m.id);
+        merged.push(m);
+      }
     }
 
     await sql(
       `UPDATE messages SET is_read = true
-       WHERE (conversation_id = $1 OR conversation_id = $2)
-         AND receiver_user_id = $3 AND is_read = false`,
-      [conversationId, getConversationId(me, partnerId), me],
+       WHERE receiver_user_id = $1 AND is_read = false
+         AND (
+           conversation_id = $2
+           OR conversation_id = $3
+           OR (sender_user_id = $4 AND receiver_user_id = $1)
+         )`,
+      [me, peerConv, isSupport ? supportConv : peerConv, partnerId],
     );
 
     return Response.json({
-      messages: unique,
+      messages: merged,
       partner: {
         id: partnerId,
         username: partner.username,
-        display_name: partner.display_name || partner.name,
+        display_name: isSupport
+          ? partner.display_name || partner.name || 'Crestar'
+          : partner.display_name || partner.name,
         profile_image: partner.profile_image,
-        is_verified: partner.is_verified,
-        is_system_account: partner.is_system_account,
+        is_verified: partner.is_verified || isSupport,
+        is_system_account: isSupport || !!partner.is_system_account,
       },
-      conversationId,
+      conversationId: isSupport ? supportConv : peerConv,
     });
   } catch (error) {
     console.error('Get messages error:', error);
@@ -156,10 +255,8 @@ export async function POST(request) {
       return Response.json({ error: 'Cannot message yourself' }, { status: 400 });
     }
 
-    let conversationId = getConversationId(me, toId);
-    if (partner.is_system_account || String(partner.username || '').toLowerCase() === 'crestar') {
-      conversationId = `support_${me}`;
-    }
+    const isSupport = isCrestarPartner(partner);
+    const conversationId = isSupport ? `support_${me}` : getConversationId(me, toId);
 
     const result = await sql(
       `INSERT INTO messages (conversation_id, sender_user_id, receiver_user_id, message_text)
@@ -170,7 +267,7 @@ export async function POST(request) {
     const newMessage = result[0];
 
     try {
-      if (!partner.is_system_account) {
+      if (!isSupport) {
         const senderName = await getUserDisplayName(me);
         const preview = message.trim().slice(0, 80);
 
@@ -212,8 +309,7 @@ export async function POST(request) {
                 <strong>${senderName}</strong> sent you a message regarding order <strong>${orderLabel}</strong>${activeOrder.item_title ? ` (${activeOrder.item_title})` : ''}:
               </p>
               <p style="color:#fff;background:#1c1c1c;border-left:3px solid #D4AF37;padding:12px 16px;border-radius:8px;line-height:1.6;">"${preview}"</p>
-              <p style="color:#ddd;line-height:1.6;">Open your Crestar inbox to reply and keep the delivery on track.</p>
-              <p style="color:#888;font-size:12px;margin-top:24px;">Crestar — Shop, Create, Earn Together</p>
+              <p style="color:#ddd;line-height:1.6;">Open your Crestar inbox to reply.</p>
             </div>`,
           });
         } else {
@@ -222,18 +318,6 @@ export async function POST(request) {
       }
     } catch (notifyErr) {
       console.error('Message notification failed:', notifyErr);
-    }
-
-    // Auto-reply from system accounts (support)
-    if (partner.is_system_account) {
-      const autoReplyText =
-        'Thank you for reaching out! Our support team has received your message. A team member will review and respond to you shortly. In the meantime, feel free to share any additional details about your issue.';
-
-      await sql(
-        `INSERT INTO messages (conversation_id, sender_user_id, receiver_user_id, message_text)
-         VALUES ($1, $2, $3, $4)`,
-        [conversationId, toId, me, autoReplyText],
-      );
     }
 
     return Response.json({ success: true, message: newMessage, conversationId });
