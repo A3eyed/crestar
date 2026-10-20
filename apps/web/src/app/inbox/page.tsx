@@ -80,6 +80,7 @@ export default function InboxPage() {
       if (res.ok) {
         const data = await res.json();
         setMessages(data.messages || []);
+        // Opening a conversation marks those messages read on the server
         if (data.partner) {
           setActivePartner({
             id: String(data.partner.id),
@@ -94,6 +95,15 @@ export default function InboxPage() {
             conversationId: data.conversationId || conversationId || null,
           });
         }
+        // Optimistically clear unread for this thread in the list
+        setConversations((prev) =>
+          prev.map((c) => {
+            const match =
+              (conversationId && c.conversation_id === conversationId) ||
+              (partnerId && String(c.partner_id) === String(partnerId));
+            return match ? { ...c, unread_count: 0 } : c;
+          }),
+        );
         setTimeout(
           () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }),
           80,
@@ -133,7 +143,6 @@ export default function InboxPage() {
     });
   };
 
-  // Deep link: /inbox?userId=… | partnerId=… | conversationId=support_…
   useEffect(() => {
     if (!user?.id || deepLinkHandled.current) return;
     if (typeof window === 'undefined') return;
@@ -216,6 +225,11 @@ export default function InboxPage() {
       setSending(false);
     }
   };
+
+  const totalUnread = conversations.reduce(
+    (sum, c) => sum + (Number(c.unread_count) || 0),
+    0,
+  );
 
   if (userLoading) {
     return (
@@ -371,7 +385,14 @@ export default function InboxPage() {
           >
             <ArrowLeft size={20} />
           </a>
-          <h1 className="text-xl font-bold">Inbox</h1>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            Inbox
+            {totalUnread > 0 && (
+              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#FE2C55] text-white text-[11px] font-bold flex items-center justify-center">
+                {totalUnread > 99 ? '99+' : totalUnread}
+              </span>
+            )}
+          </h1>
         </div>
       </div>
 
@@ -401,6 +422,7 @@ export default function InboxPage() {
                 ? 'Crestar'
                 : conv.partner_display_name ||
                   (conv.partner_username ? `@${conv.partner_username}` : 'User');
+              const unread = Number(conv.unread_count) || 0;
               return (
                 <button
                   key={conv.conversation_id}
@@ -408,7 +430,7 @@ export default function InboxPage() {
                   onClick={() => openConversation(conv)}
                   className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl hover:bg-white/5 transition-colors text-left"
                 >
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
+                  <div className="relative w-12 h-12 rounded-full overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
                     {conv.partner_avatar ? (
                       <img
                         src={conv.partner_avatar}
@@ -420,11 +442,16 @@ export default function InboxPage() {
                         {name.charAt(0).toUpperCase()}
                       </span>
                     )}
+                    {unread > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#FE2C55] border-2 border-black" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="font-semibold text-sm truncate">{name}</span>
+                        <span className={`text-sm truncate ${unread > 0 ? 'font-bold' : 'font-semibold'}`}>
+                          {name}
+                        </span>
                         {(conv.partner_verified || isSupport) && (
                           <BadgeCheck size={14} className="text-[#D4AF37] shrink-0" />
                         )}
@@ -435,17 +462,15 @@ export default function InboxPage() {
                     </div>
                     <p
                       className={`text-sm truncate mt-0.5 ${
-                        conv.unread_count > 0
-                          ? 'text-white font-medium'
-                          : 'text-white/50'
+                        unread > 0 ? 'text-white font-medium' : 'text-white/50'
                       }`}
                     >
                       {conv.last_message}
                     </p>
                   </div>
-                  {conv.unread_count > 0 && (
-                    <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#D4AF37] text-black text-xs font-bold flex items-center justify-center shrink-0">
-                      {conv.unread_count}
+                  {unread > 0 && (
+                    <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#FE2C55] text-white text-xs font-bold flex items-center justify-center shrink-0">
+                      {unread > 99 ? '99+' : unread}
                     </span>
                   )}
                 </button>
