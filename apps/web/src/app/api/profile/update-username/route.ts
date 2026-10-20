@@ -2,10 +2,13 @@
 import sql from '@/app/api/utils/sql';
 import { resolveUserId, getSession } from '@/app/api/utils/auth';
 import { ensureAppUser } from '@/app/api/utils/ensureAppUser';
+import { ensureCoreSchema } from '@/app/api/utils/ensureSchema';
 
 /** POST /api/profile/update-username — TikTok-style handle */
 export async function POST(request) {
   try {
+    await ensureCoreSchema();
+
     const body = await request.json();
     let username = String(body?.username || '')
       .trim()
@@ -14,7 +17,7 @@ export async function POST(request) {
 
     const userId = await resolveUserId(request);
     if (!userId) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json({ error: 'Unauthorized — please sign in again' }, { status: 401 });
     }
 
     const session = await getSession(request);
@@ -50,6 +53,15 @@ export async function POST(request) {
       'live',
       'cart',
       'checkout',
+      'inbox',
+      'orders',
+      'wallet',
+      'shop',
+      'search',
+      'notifications',
+      'monetization-center',
+      'create',
+      'create-listing',
     ]);
     if (reserved.has(username)) {
       return Response.json({ error: 'That username is not available' }, { status: 400 });
@@ -75,9 +87,14 @@ export async function POST(request) {
     }
 
     if (currentUser.username && currentUser.username.toLowerCase() === username) {
-      return Response.json({ success: true, user: currentUser, message: 'Username unchanged' });
+      return Response.json({
+        success: true,
+        user: currentUser,
+        message: 'Username unchanged',
+      });
     }
 
+    // 30-day cooldown only after a prior intentional change (timestamp set)
     if (currentUser.username_last_changed) {
       const daysSinceLastChange = Math.floor(
         (Date.now() - new Date(currentUser.username_last_changed).getTime()) /
