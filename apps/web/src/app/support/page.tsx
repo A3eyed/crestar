@@ -13,6 +13,12 @@ const REPORT_TYPES = [
   { value: 'user_behavior', label: 'Report a User' },
 ];
 
+// Keep in sync with SUPPORT_WHATSAPP_NUMBER in api/utils/support.ts
+const SUPPORT_WHATSAPP_NUMBER = '233543799308';
+const SUPPORT_WHATSAPP_LINK = `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+  'Hello Crestar Support, I need help.',
+)}`;
+
 export default function SupportPage() {
   const { data: user, loading: userLoading } = useUser();
 
@@ -41,15 +47,19 @@ export default function SupportPage() {
       const res = await fetch('/api/support/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           type,
           subject: subject.trim(),
           message: message.trim(),
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit');
+        if (res.status === 401) {
+          throw new Error('Please sign in again to submit a report');
+        }
+        throw new Error(data.error || 'Failed to submit report');
       }
       setSuccessId(data.reportId || 'submitted');
       setSubject('');
@@ -87,7 +97,7 @@ export default function SupportPage() {
           <h1 className="text-2xl font-bold mb-2">Report Received</h1>
           <p className="text-white/60 mb-2">
             Our team will review your report and respond within 24 hours. Check your Inbox for the
-            reply.
+            reply, or message us on WhatsApp for faster help.
           </p>
           <p className="text-white/40 text-sm mb-8">Reference: {successId}</p>
           <div className="space-y-3">
@@ -96,6 +106,14 @@ export default function SupportPage() {
               className="block w-full bg-[#D4AF37] text-black py-3.5 rounded-xl font-bold hover:opacity-90"
             >
               Go to Inbox
+            </a>
+            <a
+              href={SUPPORT_WHATSAPP_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full bg-white/10 border border-white/20 py-3.5 rounded-xl font-semibold hover:bg-white/20"
+            >
+              WhatsApp Support
             </a>
             <button
               onClick={() => setSuccessId('')}
@@ -131,9 +149,14 @@ export default function SupportPage() {
           <MessageCircle size={20} className="text-[#D4AF37] mt-0.5 shrink-0" />
           <p className="text-white/60 text-sm">
             Tell us what's going on and our team will get back to you within 24 hours. Replies
-            arrive in your Inbox. You can also email us any time at{' '}
-            <a href="mailto:support@crestarhq.com" className="text-[#D4AF37] underline">
-              support@crestarhq.com
+            arrive in your Inbox. For faster help, message us on WhatsApp at{' '}
+            <a
+              href={SUPPORT_WHATSAPP_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#D4AF37] underline"
+            >
+              +233 54 379 9308
             </a>
             .
           </p>
