@@ -17,7 +17,7 @@ const FIELD_CONFIG = {
 };
 
 export default function EditProfilePage() {
-  const { data: user, refetch } = useUser();
+  const { data: user, loading: userLoading, refetch } = useUser();
   const [upload, { loading: uploading }] = useUpload();
   const saveCompletedRef = useRef(false);
 
@@ -32,16 +32,26 @@ export default function EditProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [editValue, setEditValue] = useState("");
+  const [statusMsg, setStatusMsg] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(() => {
-    if (!saveCompletedRef.current) {
+    if (!userLoading && !user) {
+      window.location.href = "/account/signin?callbackUrl=/edit-profile";
+    }
+  }, [user, userLoading]);
+
+  useEffect(() => {
+    if (!saveCompletedRef.current && user) {
       fetchProfile();
     }
   }, [user]);
 
   const fetchProfile = async () => {
     try {
-      const response = await fetch("/api/profile/update");
+      const response = await fetch(`/api/profile/update?_t=${Date.now()}`, {
+        credentials: "include",
+      });
       if (response.ok) {
         const data = await response.json();
         if (data.user) {
@@ -51,7 +61,8 @@ export default function EditProfilePage() {
             displayName:
               data.user.display_name || data.user.name || user?.name || "",
             bio: data.user.bio || "",
-            profileImage: data.user.profile_image || null,
+            profileImage:
+              data.user.profile_image || user?.profile_image || user?.image || null,
           };
           setFormData(initial);
           setOriginalData(initial);
@@ -83,14 +94,27 @@ export default function EditProfilePage() {
 
   const handleImagePick = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
+    setErrorMsg(null);
+    setStatusMsg(null);
+
+    if (!file.type.startsWith("image/")) {
+      setErrorMsg("Please choose an image file (JPEG, PNG, or WebP).");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMsg("Image must be under 10MB.");
+      return;
+    }
 
     const { url, error } = await upload({ file });
-    if (error) {
-      alert("Upload Failed: " + error);
+    if (error || !url) {
+      setErrorMsg(error || "Upload failed. Please try again.");
       return;
     }
     setFormData((prev) => ({ ...prev, profileImage: url }));
+    setStatusMsg("Photo ready — tap Save to apply.");
   };
 
   const openEditModal = (field) => {
@@ -111,7 +135,10 @@ export default function EditProfilePage() {
     if (editingField === "name") {
       setFormData((prev) => ({ ...prev, displayName: editValue }));
     } else if (editingField === "username") {
-      setFormData((prev) => ({ ...prev, username: editValue.toLowerCase() }));
+      setFormData((prev) => ({
+        ...prev,
+        username: editValue.toLowerCase().replace(/[^a-z0-9._]/g, ""),
+      }));
     } else if (editingField === "bio") {
       setFormData((prev) => ({ ...prev, bio: editValue }));
     }
@@ -119,6 +146,9 @@ export default function EditProfilePage() {
   };
 
   const handleSave = async () => {
+    setErrorMsg(null);
+    setStatusMsg(null);
+
     if (!hasChanges) {
       window.history.back();
       return;
@@ -129,6 +159,7 @@ export default function EditProfilePage() {
       const response = await fetch("/api/profile/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           displayName: formData.displayName,
           bio: formData.bio,
@@ -136,30 +167,31 @@ export default function EditProfilePage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data.error || "Failed to update profile");
+        throw new Error(data.error || data.detail || "Failed to update profile");
       }
 
       const usernameChanged =
-        formData.username !== (originalData?.username || "");
+        formData.username.trim() !== (originalData?.username || "").trim();
       if (usernameChanged && formData.username.trim().length >= 2) {
         if (profileData?.canChangeUsernameIn > 0) {
-          alert(
+          throw new Error(
             `You can change your username again in ${profileData.canChangeUsernameIn} days.`,
           );
-          setIsSubmitting(false);
-          return;
         }
 
         const usernameRes = await fetch("/api/profile/update-username", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: formData.username }),
+          credentials: "include",
+          body: JSON.stringify({ username: formData.username.trim() }),
         });
-        const usernameData = await usernameRes.json();
+        const usernameData = await usernameRes.json().catch(() => ({}));
         if (!usernameRes.ok) {
-          throw new Error(usernameData.error || "Failed to update username");
+          throw new Error(
+            usernameData.error || usernameData.detail || "Failed to update username",
+          );
         }
       }
 
@@ -168,7 +200,7 @@ export default function EditProfilePage() {
       window.location.href = `/profile?updated=${Date.now()}`;
     } catch (error) {
       console.error("Update profile error:", error);
-      alert(error.message);
+      setErrorMsg(error.message || "Could not save profile");
     } finally {
       setIsSubmitting(false);
     }
@@ -204,11 +236,20 @@ export default function EditProfilePage() {
     },
   ];
 
+  if (userLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-10 h-10 border-2 border-white/20 border-t-[#D4AF37] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="sticky top-0 z-50 bg-black border-b border-white/10 backdrop-blur-xl bg-opacity-95">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
+            type="button"
             onClick={() => window.history.back()}
             className="text-white text-base hover:opacity-70 transition-opacity"
           >
@@ -216,8 +257,9 @@ export default function EditProfilePage() {
           </button>
           <h1 className="text-white text-lg font-semibold">Edit profile</h1>
           <button
+            type="button"
             onClick={handleSave}
-            disabled={isSubmitting}
+            disabled={isSubmitting || uploading}
             className={`text-base font-semibold transition-opacity ${
               hasChanges ? "text-white" : "text-white/40"
             } ${isSubmitting ? "opacity-50" : "hover:opacity-70"}`}
@@ -228,23 +270,40 @@ export default function EditProfilePage() {
       </div>
 
       <div className="max-w-2xl mx-auto pb-24">
+        {(errorMsg || statusMsg) && (
+          <div
+            className={`mx-4 mt-3 px-3 py-2.5 rounded-lg text-sm ${
+              errorMsg
+                ? "bg-red-500/15 text-red-300 border border-red-500/30"
+                : "bg-[#D4AF37]/15 text-[#D4AF37] border border-[#D4AF37]/30"
+            }`}
+          >
+            {errorMsg || statusMsg}
+          </div>
+        )}
+
         <label className="block py-7 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors">
           <input
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
             onChange={handleImagePick}
-            disabled={uploading}
+            disabled={uploading || isSubmitting}
             className="hidden"
           />
           <div className="flex flex-col items-center">
             <div className="relative mb-3">
               <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center overflow-hidden">
                 {formData.profileImage ? (
-                  <img src={formData.profileImage} alt="" className="w-full h-full object-cover" />
+                  <img
+                    src={formData.profileImage}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <span className="text-white text-4xl font-bold">
-                    {(formData.displayName || user?.name || user?.email)?.charAt(0).toUpperCase() ||
-                      "U"}
+                    {(formData.displayName || user?.name || user?.email)
+                      ?.charAt(0)
+                      .toUpperCase() || "U"}
                   </span>
                 )}
               </div>
@@ -252,7 +311,9 @@ export default function EditProfilePage() {
                 <Camera size={16} color="white" />
               </div>
             </div>
-            <p className="text-white/60 text-sm">{uploading ? "Uploading..." : "Change photo"}</p>
+            <p className="text-white/60 text-sm">
+              {uploading ? "Uploading..." : "Change photo"}
+            </p>
           </div>
         </label>
 
@@ -260,6 +321,7 @@ export default function EditProfilePage() {
           {fields.map((field) => (
             <button
               key={field.id}
+              type="button"
               onClick={() => openEditModal(field.id)}
               className="w-full flex items-center px-4 py-4 border-b border-white/5 hover:bg-white/5 transition-colors"
             >
@@ -292,15 +354,20 @@ export default function EditProfilePage() {
         <div className="fixed inset-0 z-50 bg-black">
           <div className="sticky top-0 z-50 bg-black border-b border-white/10">
             <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-              <button onClick={closeEditModal} className="text-white text-base hover:opacity-70">
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="text-white text-base hover:opacity-70"
+              >
                 Cancel
               </button>
               <h1 className="text-white text-lg font-semibold">{fieldConfig?.label || ""}</h1>
               <button
+                type="button"
                 onClick={saveFieldEdit}
                 className="text-white text-base font-semibold hover:opacity-70"
               >
-                Save
+                Done
               </button>
             </div>
           </div>
