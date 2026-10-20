@@ -16,6 +16,36 @@ import {
   ChevronDown,
 } from 'lucide-react';
 
+function closeViewer(video) {
+  // Prefer popping history so: Profile → Video → Close returns to Profile
+  // (never push /seller/… which stacks a second profile and traps Back).
+  try {
+    const ref = typeof document !== 'undefined' ? document.referrer : '';
+    let sameOrigin = false;
+    if (ref) {
+      const u = new URL(ref);
+      sameOrigin = u.origin === window.location.origin;
+    }
+    if (sameOrigin && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+  } catch {
+    /* fall through */
+  }
+
+  // Deep-link / no history: land on creator profile (handle preferred)
+  if (video?.username) {
+    window.location.assign(`/${encodeURIComponent(video.username)}`);
+    return;
+  }
+  if (video?.creator_user_id) {
+    window.location.assign(`/seller/${encodeURIComponent(video.creator_user_id)}`);
+    return;
+  }
+  window.location.assign('/');
+}
+
 export default function VideoViewerPage() {
   const { data: user } = useUser();
   const videoRef = useRef(null);
@@ -48,7 +78,6 @@ export default function VideoViewerPage() {
       setLikeCount(data.video.likes_count || 0);
       setCommentCount(data.video.comments_count || 0);
 
-      // Load the creator's other videos for prev/next navigation (TikTok style)
       const creatorId = data.video.creator_user_id;
       if (creatorId) {
         const vidsRes = await fetch(`/api/videos/user/${creatorId}`);
@@ -74,6 +103,7 @@ export default function VideoViewerPage() {
     if (id) fetchVideo(id);
   }, [fetchVideo]);
 
+  // Swipe between creator videos without growing the history stack
   const goToVideo = (direction) => {
     const nextIndex = currentIndex + direction;
     if (nextIndex < 0 || nextIndex >= creatorVideos.length) return;
@@ -82,6 +112,7 @@ export default function VideoViewerPage() {
     window.history.replaceState(null, '', `/video/${nextVideo.id}`);
     fetchVideo(nextVideo.id);
     setShowComments(false);
+    setIsPlaying(true);
   };
 
   const togglePlay = () => {
@@ -222,7 +253,6 @@ export default function VideoViewerPage() {
 
   return (
     <div className="fixed inset-0 bg-black flex items-center justify-center">
-      {/* Video */}
       <div className="relative h-full aspect-[9/16] max-w-full bg-black">
         <video
           ref={videoRef}
@@ -237,6 +267,7 @@ export default function VideoViewerPage() {
 
         {!isPlaying && (
           <button
+            type="button"
             onClick={togglePlay}
             className="absolute inset-0 flex items-center justify-center"
           >
@@ -246,17 +277,19 @@ export default function VideoViewerPage() {
           </button>
         )}
 
-        {/* Close */}
-        <a
-          href={`/seller/${video.creator_user_id}`}
-          className="absolute top-4 left-4 w-10 h-10 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80"
+        {/* Close — history.back so we leave the viewer, not push another profile */}
+        <button
+          type="button"
+          onClick={() => closeViewer(video)}
+          aria-label="Close video"
+          className="absolute top-4 left-4 z-10 w-10 h-10 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80"
         >
           <X size={20} className="text-white" />
-        </a>
+        </button>
 
-        {/* Prev / Next (TikTok arrows) */}
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-3">
           <button
+            type="button"
             onClick={() => goToVideo(-1)}
             disabled={!hasPrev}
             className="w-10 h-10 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 disabled:opacity-30"
@@ -264,6 +297,7 @@ export default function VideoViewerPage() {
             <ChevronUp size={20} className="text-white" />
           </button>
           <button
+            type="button"
             onClick={() => goToVideo(1)}
             disabled={!hasNext}
             className="w-10 h-10 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 disabled:opacity-30"
@@ -272,9 +306,8 @@ export default function VideoViewerPage() {
           </button>
         </div>
 
-        {/* Right action bar */}
         <div className="absolute right-3 bottom-28 flex flex-col items-center gap-5">
-          <button onClick={handleLike} className="flex flex-col items-center gap-1">
+          <button type="button" onClick={handleLike} className="flex flex-col items-center gap-1">
             <span className="w-12 h-12 bg-white/15 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/25">
               <Heart
                 size={22}
@@ -284,22 +317,24 @@ export default function VideoViewerPage() {
             </span>
             <span className="text-white text-xs font-semibold">{likeCount}</span>
           </button>
-          <button onClick={openComments} className="flex flex-col items-center gap-1">
+          <button type="button" onClick={openComments} className="flex flex-col items-center gap-1">
             <span className="w-12 h-12 bg-white/15 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/25">
               <MessageCircle size={22} className="text-white" />
             </span>
             <span className="text-white text-xs font-semibold">{commentCount}</span>
           </button>
-          <button onClick={handleShare} className="flex flex-col items-center gap-1">
+          <button type="button" onClick={handleShare} className="flex flex-col items-center gap-1">
             <span className="w-12 h-12 bg-white/15 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/25">
               <Share2 size={22} className="text-white" />
             </span>
           </button>
         </div>
 
-        {/* Bottom info */}
         <div className="absolute bottom-0 left-0 right-16 p-4 pb-6 bg-gradient-to-t from-black/70 to-transparent">
-          <a href={`/seller/${video.creator_user_id}`} className="flex items-center gap-2 mb-2">
+          <a
+            href={video.username ? `/${video.username}` : `/seller/${video.creator_user_id}`}
+            className="flex items-center gap-2 mb-2"
+          >
             <span className="text-white font-bold">{displayName}</span>
             {video.is_verified && <BadgeCheck size={16} className="text-[#D4AF37]" />}
           </a>
@@ -307,7 +342,6 @@ export default function VideoViewerPage() {
             <p className="text-white/90 text-sm mb-3 line-clamp-2">{video.caption}</p>
           ) : null}
 
-          {/* Product tag */}
           {firstTag && tagId && (
             <a
               href={`/product/${tagId}`}
@@ -339,13 +373,13 @@ export default function VideoViewerPage() {
         </div>
       </div>
 
-      {/* Comments panel (TikTok-style side sheet) */}
       {showComments && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60">
           <div className="bg-[#141414] border border-white/10 w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-white/10">
               <h3 className="font-bold">Comments ({commentCount})</h3>
               <button
+                type="button"
                 onClick={() => setShowComments(false)}
                 className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"
               >
@@ -390,6 +424,7 @@ export default function VideoViewerPage() {
                 className="flex-1 bg-white/10 rounded-full px-4 py-2.5 text-white text-sm placeholder-white/40 focus:outline-none"
               />
               <button
+                type="button"
                 onClick={handlePostComment}
                 disabled={!newComment.trim() || postingComment}
                 className="w-10 h-10 rounded-full bg-[#D4AF37] flex items-center justify-center disabled:opacity-40"
