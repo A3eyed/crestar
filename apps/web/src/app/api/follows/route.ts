@@ -3,17 +3,29 @@ import sql from '@/app/api/utils/sql';
 import { resolveUserId } from '@/app/api/utils/auth';
 import { createNotification, getUserDisplayName } from '@/app/api/utils/notify';
 
+async function resolveTargetUserId(raw) {
+  const key = String(raw || '').trim().replace(/^@+/, '');
+  if (!key) return null;
+  const [row] = await sql`
+    SELECT id FROM auth_users
+    WHERE id::text = ${key} OR lower(username) = lower(${key})
+    LIMIT 1
+  `;
+  return row?.id ? String(row.id) : null;
+}
+
 /**
  * Follows API — TikTok-style follow/unfollow.
  *
- * GET  /api/follows?targetId=<userId>   → { following: boolean, followersCount }
- * POST /api/follows { targetId }        → toggles follow; returns { following, followersCount }
+ * GET  /api/follows?targetId=<userId|username> → { following, followersCount }
+ * POST /api/follows { targetId }              → toggles; returns { following, followersCount }
  */
 export async function GET(request) {
   try {
     const userId = await resolveUserId(request);
     const { searchParams } = new URL(request.url);
-    const targetId = searchParams.get('targetId');
+    const targetRaw = searchParams.get('targetId');
+    const targetId = await resolveTargetUserId(targetRaw);
 
     if (!targetId) {
       return Response.json({ error: 'targetId required' }, { status: 400 });
@@ -23,7 +35,7 @@ export async function GET(request) {
     if (userId) {
       const rows = await sql`
         SELECT 1 FROM follows
-        WHERE follower_id = ${userId} AND following_id = ${targetId}
+        WHERE follower_id = ${String(userId)} AND following_id = ${targetId}
       `;
       following = rows.length > 0;
     }
@@ -50,36 +62,35 @@ export async function POST(request) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { targetId } = await request.json();
+    const body = await request.json();
+    const targetId = await resolveTargetUserId(body.targetId);
     if (!targetId) {
       return Response.json({ error: 'targetId required' }, { status: 400 });
     }
-    if (targetId === userId) {
+    if (targetId === String(userId)) {
       return Response.json({ error: 'You cannot follow yourself' }, { status: 400 });
     }
 
-    // Toggle: unfollow if already following, otherwise follow
     const existing = await sql`
       SELECT id FROM follows
-      WHERE follower_id = ${userId} AND following_id = ${targetId}
+      WHERE follower_id = ${String(userId)} AND following_id = ${targetId}
     `;
 
     let following;
     if (existing.length > 0) {
       await sql`
         DELETE FROM follows
-        WHERE follower_id = ${userId} AND following_id = ${targetId}
+        WHERE follower_id = ${String(userId)} AND following_id = ${targetId}
       `;
       following = false;
     } else {
       await sql`
         INSERT INTO follows (follower_id, following_id)
-        VALUES (${userId}, ${targetId})
+        VALUES (${String(userId)}, ${targetId})
         ON CONFLICT (follower_id, following_id) DO NOTHING
       `;
       following = true;
 
-      // Notify the followed user (in-app)
       try {
         const followerName = await getUserDisplayName(userId);
         await createNotification({
@@ -87,24 +98,23 @@ export async function POST(request) {
           type: 'follow',
           title: '👤 New Follower',
           body: `${followerName} started following you`,
-          data: { from_user_id: userId },
+          data: { from_user_id: String(userId) },
         });
       } catch (notifyErr) {
         console.error('Follow notification failed:', notifyErr);
       }
     }
 
-    // Keep denormalized counters in sync on auth_users (best effort)
     try {
       await sql`
         UPDATE auth_users SET followers_count = (
           SELECT COUNT(*) FROM follows WHERE following_id = ${targetId}
-        ) WHERE id = ${targetId}
+        ) WHERE id::text = ${targetId}
       `;
       await sql`
         UPDATE auth_users SET following_count = (
-          SELECT COUNT(*) FROM follows WHERE follower_id = ${userId}
-        ) WHERE id = ${userId}
+          SELECT COUNT(*) FROM follows WHERE follower_id = ${String(userId)}
+        ) WHERE id::text = ${String(userId)}
       `;
     } catch (e) {
       console.warn('Follower counter sync failed:', e?.message);
