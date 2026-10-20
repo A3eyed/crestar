@@ -5,24 +5,35 @@ import { resolveUserId } from '@/app/api/utils/auth';
 /**
  * Get all videos by a specific user
  * Used to display videos on user profile (Posts tab)
+ * Accepts user id OR username (TikTok-style public profiles use handles).
  */
 export async function GET(request, { params }) {
   try {
-    // params is a Promise in this Next.js version — must be awaited,
-    // otherwise userId is undefined and no videos are ever returned
-    const { userId } = await params;
+    const { userId: raw } = await params;
+    let targetUserId = String(raw || '').trim().replace(/^@+/, '');
 
-    // Support "me" to get current user's videos
-    let targetUserId = userId;
-    if (userId === 'me') {
+    if (!targetUserId) {
+      return Response.json({ videos: [] });
+    }
+
+    if (targetUserId === 'me') {
       const currentUserId = await resolveUserId(request);
       if (!currentUserId) {
         return Response.json({ error: 'Unauthorized - Please sign in' }, { status: 401 });
       }
-      targetUserId = currentUserId;
+      targetUserId = String(currentUserId);
+    } else {
+      // Resolve handle → id so /api/videos/user/syredesyre works
+      const [resolved] = await sql`
+        SELECT id FROM auth_users
+        WHERE id::text = ${targetUserId} OR lower(username) = lower(${targetUserId})
+        LIMIT 1
+      `;
+      if (resolved?.id) {
+        targetUserId = String(resolved.id);
+      }
     }
 
-    // Step 1: Fetch user's videos with profile data
     const videos = await sql`
       SELECT 
         v.id,
@@ -51,7 +62,6 @@ export async function GET(request, { params }) {
       ORDER BY v.created_at DESC
     `;
 
-    // Step 2: Fetch tagged items for these videos
     const videoIds = videos.map((v) => v.id);
     const taggedItemsMap = {};
 
@@ -70,7 +80,7 @@ export async function GET(request, { params }) {
         LEFT JOIN products p ON p.id = vpt.product_id
         LEFT JOIN services s ON s.id = vpt.service_id
         WHERE vpt.video_id = ANY($1)`,
-        [videoIds]
+        [videoIds],
       );
 
       for (const tag of taggedItems) {
@@ -91,7 +101,6 @@ export async function GET(request, { params }) {
       }
     }
 
-    // Step 3: Format response with both camelCase and snake_case
     const formattedVideos = videos.map((video) => {
       const items = taggedItemsMap[video.id] || [];
       const reliableUsername =
