@@ -17,6 +17,26 @@ import {
   Loader2,
 } from 'lucide-react';
 
+function goBackFromProfile() {
+  // If we arrived here from a video close that pushed a profile URL, Back would
+  // re-open the video. Prefer feed in that case.
+  try {
+    const ref = document.referrer;
+    if (ref) {
+      const u = new URL(ref);
+      if (u.origin === window.location.origin && u.pathname.startsWith('/video/')) {
+        window.location.assign('/');
+        return;
+      }
+    }
+  } catch {}
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.assign('/');
+  }
+}
+
 /**
  * Public profile — TikTok-style for any user (handle or id).
  * Own profile → Edit Profile; others → Follow + Message (opens DM).
@@ -65,7 +85,6 @@ export default function PublicProfilePage() {
         data.profile?.stats?.following ?? data.profile?.following_count ?? 0,
       );
 
-      // Always load videos by resolved user id (not raw handle)
       if (uid) {
         try {
           const vidsRes = await fetch(`/api/videos/user/${encodeURIComponent(uid)}`);
@@ -85,7 +104,6 @@ export default function PublicProfilePage() {
 
   useEffect(() => {
     const pathParts = window.location.pathname.split('/').filter(Boolean);
-    // /seller/<id> or /<username>
     const key =
       pathParts[0] === 'seller' ? pathParts[1] : pathParts[pathParts.length - 1];
     if (key) fetchAll(key);
@@ -179,7 +197,6 @@ export default function PublicProfilePage() {
       window.location.href = `/account/signin?callbackUrl=/inbox?userId=${encodeURIComponent(resolvedUserId)}`;
       return;
     }
-    // TikTok-style: open DM with this person immediately
     window.location.href = `/inbox?userId=${encodeURIComponent(resolvedUserId)}`;
   };
 
@@ -207,7 +224,8 @@ export default function PublicProfilePage() {
         <UserIcon size={56} className="text-white/20" />
         <p className="text-white/60 text-lg">This account doesn't exist</p>
         <button
-          onClick={() => window.history.back()}
+          type="button"
+          onClick={goBackFromProfile}
           className="px-6 py-3 bg-[#D4AF37] text-black rounded-xl font-bold hover:opacity-90"
         >
           Go Back
@@ -238,13 +256,15 @@ export default function PublicProfilePage() {
       <div className="sticky top-0 z-20 bg-black/90 backdrop-blur border-b border-white/10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
-            onClick={() => window.history.back()}
+            type="button"
+            onClick={goBackFromProfile}
             className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"
           >
             <ArrowLeft size={20} />
           </button>
           <span className="font-semibold text-sm">@{profile.username}</span>
           <button
+            type="button"
             onClick={handleShare}
             className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"
           >
@@ -294,7 +314,6 @@ export default function PublicProfilePage() {
             <p className="text-white/80 text-sm text-center max-w-sm mb-5">{profile.bio}</p>
           )}
 
-          {/* TikTok: own profile shows Edit; others Follow + Message */}
           {isOwnProfile ? (
             <div className="flex items-center gap-2 w-full max-w-sm mb-6">
               <a
