@@ -18,7 +18,6 @@ export async function POST(request) {
       return Response.json({ error: 'Type, subject, and message are required' }, { status: 400 });
     }
 
-    // Valid report types
     const validTypes = [
       'content_violation',
       'user_behavior',
@@ -30,15 +29,10 @@ export async function POST(request) {
       return Response.json({ error: 'Invalid report type' }, { status: 400 });
     }
 
-    // Look up reporter info for the admin message
     const [reporter] = await sql`
       SELECT username, email FROM auth_users WHERE id = ${userId}
     `;
 
-    // Build comprehensive report message for admin
-    let adminMessage = `🚨 ${subject}\n\n`;
-
-    // Add report type and details
     const typeLabels = {
       content_violation: 'Content Policy Violation',
       user_behavior: 'User Behavior Report',
@@ -47,14 +41,13 @@ export async function POST(request) {
       general_support: 'General Support Request',
     };
 
+    let adminMessage = `🚨 ${subject}\n\n`;
     adminMessage += `Type: ${typeLabels[type]}\n`;
     adminMessage += `Reporter: @${reporter?.username || 'User'} (${reporter?.email || userId})\n`;
 
-    // Add target information if provided
     if (targetUserId) {
       adminMessage += `Reported User: ${targetUserId}\n`;
     }
-
     if (targetContentId && targetContentType) {
       adminMessage += `Content: ${targetContentType} ${targetContentId}\n`;
     }
@@ -62,16 +55,64 @@ export async function POST(request) {
     adminMessage += `\nDetails:\n${message}\n`;
     adminMessage += `\nReported at: ${new Date().toISOString()}`;
 
-    // Route the report into the user's @Crestar support thread. This used to
-    // write to a literal 'admin' user id, which doesn't exist — so the thread
-    // was orphaned and nobody could ever reply to it.
-    await sendSupportMessage({
-      userId,
-      text: adminMessage,
-      direction: 'inbound',
-    });
+    const reportId = `RPT${Date.now()}`;
 
-    // Log the report in admin logs
+    // Primary path: support inbox thread with @Crestar
+    try {
+      await sendSupportMessage({
+        userId,
+        text: adminMessage,
+        direction: 'inbound',
+      });
+    } catch (threadErr) {
+      console.error('Support thread write failed:', threadErr);
+      // Fallback: still accept the report via admin_logs so the user is not blocked
+      try {
+        await sql`
+          INSERT INTO admin_logs (admin_id, action_type, target_user_id, target_entity_type, target_entity_id, details)
+          VALUES (
+            NULL,
+            'user_report',
+            ${userId},
+            ${targetContentType || 'user'},
+            ${targetContentId || targetUserId || null},
+            ${JSON.stringify({
+              report_type: type,
+              subject,
+              message,
+              reporter_id: userId,
+              target_user_id: targetUserId,
+              target_content_id: targetContentId,
+              target_content_type: targetContentType,
+              report_id: reportId,
+              thread_error: String(threadErr?.message || threadErr),
+              reported_at: new Date().toISOString(),
+            })}
+          )
+        `;
+      } catch (logFail) {
+        console.error('admin_logs fallback also failed:', logFail);
+        return Response.json(
+          {
+            error:
+              threadErr?.message?.includes('not configured')
+                ? 'Support is temporarily unavailable. Please contact us on WhatsApp at +233 54 379 9308.'
+                : 'Failed to submit report. Please try WhatsApp support at +233 54 379 9308.',
+          },
+          { status: 500 },
+        );
+      }
+
+      return Response.json({
+        success: true,
+        message: 'Report submitted successfully',
+        reportId,
+        type: typeLabels[type],
+        via: 'admin_log_fallback',
+      });
+    }
+
+    // Best-effort audit log (non-fatal)
     try {
       await sql`
         INSERT INTO admin_logs (admin_id, action_type, target_user_id, target_entity_type, target_entity_id, details)
@@ -83,12 +124,13 @@ export async function POST(request) {
           ${targetContentId || targetUserId || null},
           ${JSON.stringify({
             report_type: type,
-            subject: subject,
-            message: message,
+            subject,
+            message,
             reporter_id: userId,
             target_user_id: targetUserId,
             target_content_id: targetContentId,
             target_content_type: targetContentType,
+            report_id: reportId,
             reported_at: new Date().toISOString(),
           })}
         )
@@ -97,29 +139,40 @@ export async function POST(request) {
       console.error('Failed to log report:', logError);
     }
 
-    // Send auto-reply to user confirming receipt
-    const autoReplyMessage = `Thank you for your report. We've received your ${typeLabels[type].toLowerCase()} and will review it within 24 hours. 
+    // Best-effort auto-reply (non-fatal)
+    try {
+      const autoReplyMessage = `Thank you for your report. We've received your ${typeLabels[type].toLowerCase()} and will review it within 24 hours.
 
-Report ID: RPT${Date.now()}
+Report ID: ${reportId}
 
-Our team takes all reports seriously and will investigate promptly. You'll receive a response once we've completed our review.
+Our team takes all reports seriously and will investigate promptly. You'll receive a response once we've completed our review. For faster help, WhatsApp us at +233 54 379 9308.
 
 - Crestar Support`;
 
-    await sendSupportMessage({
-      userId,
-      text: autoReplyMessage,
-      direction: 'outbound',
-    });
+      await sendSupportMessage({
+        userId,
+        text: autoReplyMessage,
+        direction: 'outbound',
+      });
+    } catch (replyErr) {
+      console.error('Support auto-reply failed:', replyErr);
+    }
 
     return Response.json({
       success: true,
       message: 'Report submitted successfully',
-      reportId: `RPT${Date.now()}`,
+      reportId,
       type: typeLabels[type],
     });
   } catch (error) {
     console.error('Support report error:', error);
-    return Response.json({ error: 'Failed to submit report' }, { status: 500 });
+    return Response.json(
+      {
+        error:
+          error?.message ||
+          'Failed to submit report. Please try WhatsApp support at +233 54 379 9308.',
+      },
+      { status: 500 },
+    );
   }
 }
