@@ -46,6 +46,9 @@ export default function CreateListingPage() {
   const [customSizeInput, setCustomSizeInput] = useState('');
   const [foodHubType, setFoodHubType] = useState(null);
   const [foodSubcategory, setFoodSubcategory] = useState('');
+  // Drinks: sold by pack — buyer must know pieces per pack
+  const [packPieces, setPackPieces] = useState('');
+  const [packUnitLabel, setPackUnitLabel] = useState('pieces');
 
   const fetchCenter = useCallback(async () => {
     try {
@@ -156,6 +159,9 @@ export default function CreateListingPage() {
     if (isFoodHubCenter) {
       if (!foodHubType) missing.push('Food or Drinks type');
       if (!foodSubcategory) missing.push('category');
+      if (foodHubType === 'drinks' && (!packPieces || parseInt(packPieces, 10) < 1)) {
+        missing.push('pieces per pack');
+      }
     } else if (!finalCategory) {
       missing.push('category');
     }
@@ -174,6 +180,12 @@ export default function CreateListingPage() {
       if (!v.price) return alert('Please set a price for ' + label);
       if (listingType === 'physical_goods' && !v.stockQuantity)
         return alert('Please enter stock quantity for ' + label);
+      if (isFoodHubCenter && foodHubType === 'drinks') {
+        if (!packPieces || parseInt(packPieces) < 1)
+          return alert('Enter how many pieces are in each pack (e.g. 12 bottles per pack)');
+        if (!v.stockQuantity)
+          return alert('Enter stock as number of packs for ' + label);
+      }
       if (needsPerVariantSizes && sizingCategory !== 'custom' && v.sizes.length === 0)
         return alert('Please select at least one size for ' + label);
     }
@@ -190,6 +202,14 @@ export default function CreateListingPage() {
         category: isFoodHubCenter ? foodSubcategory : finalCategory,
         foodHubType: isFoodHubCenter ? foodHubType : null,
         foodSubcategory: isFoodHubCenter ? foodSubcategory : null,
+        drinkAttributes:
+          isFoodHubCenter && foodHubType === 'drinks'
+            ? {
+                soldBy: 'pack',
+                piecesPerPack: parseInt(packPieces, 10),
+                unitLabel: packUnitLabel || 'pieces',
+              }
+            : null,
         sizingCategory: listingType === 'physical_goods' ? sizingCategory : null,
         sizeSystem: needsPerVariantSizes ? sizeSystem : null,
         sizeType: needsPerVariantSizes ? sizeType : null,
@@ -381,6 +401,46 @@ export default function CreateListingPage() {
                     ))}
                   </div>
                 )}
+                {foodHubType === 'drinks' && (
+                  <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-black/30 p-4">
+                    <p className="font-bold text-sm">Sold by the pack</p>
+                    <p className="text-white/50 text-xs">
+                      Buyers order packs. Tell them exactly how many pieces are in each pack.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-white/50 block mb-1">Pieces per pack</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={packPieces}
+                          onChange={(e) => setPackPieces(e.target.value)}
+                          placeholder="e.g. 12"
+                          className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2.5 text-sm focus:border-[#D4AF37] focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-white/50 block mb-1">Unit name</label>
+                        <select
+                          value={packUnitLabel}
+                          onChange={(e) => setPackUnitLabel(e.target.value)}
+                          className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2.5 text-sm focus:border-[#D4AF37] focus:outline-none"
+                        >
+                          <option value="pieces">pieces</option>
+                          <option value="bottles">bottles</option>
+                          <option value="cans">cans</option>
+                          <option value="sachets">sachets</option>
+                          <option value="cartons">cartons</option>
+                        </select>
+                      </div>
+                    </div>
+                    {packPieces && parseInt(packPieces) > 0 && (
+                      <p className="text-[#D4AF37] text-xs font-semibold">
+                        1 pack = {packPieces} {packUnitLabel}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -406,50 +466,6 @@ export default function CreateListingPage() {
                     </button>
                   ))}
                 </div>
-                {(sizingCategory === 'apparel' || sizingCategory === 'shoes') && (
-                  <div className="mt-4">
-                    <p className="text-sm font-semibold mb-2">Size System</p>
-                    <div className="flex flex-wrap gap-2">
-                      {SIZE_SYSTEMS.map((sys) => (
-                        <button
-                          key={sys}
-                          type="button"
-                          onClick={() => setSizeSystem(sys)}
-                          className={
-                            'px-3.5 py-2 rounded-full text-sm border ' +
-                            (sizeSystem === sys
-                              ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-semibold'
-                              : 'bg-white/5 text-white border-white/15')
-                          }
-                        >
-                          {sys}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {sizingCategory === 'apparel' && (
-                  <div className="mt-4">
-                    <p className="text-sm font-semibold mb-2">Size Type</p>
-                    <div className="flex flex-wrap gap-2">
-                      {SIZE_TYPES.map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => setSizeType(st)}
-                          className={
-                            'px-3.5 py-2 rounded-full text-sm border ' +
-                            (sizeType === st
-                              ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-semibold'
-                              : 'bg-white/5 text-white border-white/15')
-                          }
-                        >
-                          {st}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -467,66 +483,63 @@ export default function CreateListingPage() {
 
         {step === 2 && (
           <div className="space-y-6">
-            <div className="flex flex-wrap gap-2">
-              {variants.map((v, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setVariantIndex(idx)}
-                  className={
-                    'flex items-center gap-2 px-4 py-2 rounded-full text-sm border ' +
-                    (variantIndex === idx
-                      ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-semibold'
-                      : 'bg-white/5 text-white border-white/15')
-                  }
-                >
-                  {v.color || ('Variant ' + (idx + 1))}
-                  {variants.length > 1 && (
-                    <X
-                      size={13}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeVariant(idx);
-                      }}
-                    />
-                  )}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={addVariant}
-                className="px-4 py-2 rounded-full text-sm border border-dashed border-white/30 text-white/70 flex items-center gap-1"
-              >
-                <Plus size={14} /> Add
-              </button>
-            </div>
-
-            <div>
-              <label className="block font-bold mb-2">Color (optional)</label>
-              <div className="flex flex-wrap gap-2">
-                {COLOR_OPTIONS.map((c) => (
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-lg">
+                Variant {variantIndex + 1} of {variants.length}
+              </h2>
+              <div className="flex gap-2">
+                {variants.length > 1 && (
                   <button
-                    key={c}
                     type="button"
-                    onClick={() => updateVariant('color', c)}
-                    className={
-                      'px-3 py-1.5 rounded-full text-sm border ' +
-                      (currentVariant.color === c
-                        ? 'bg-white text-black border-white'
-                        : 'bg-white/5 text-white border-white/15')
-                    }
+                    onClick={() => removeVariant(variantIndex)}
+                    className="text-red-400 text-sm font-semibold"
                   >
-                    {c}
+                    Remove
                   </button>
-                ))}
+                )}
+                <button
+                  type="button"
+                  onClick={addVariant}
+                  className="text-[#D4AF37] text-sm font-semibold flex items-center gap-1"
+                >
+                  <Plus size={14} /> Add
+                </button>
               </div>
             </div>
 
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {variants.map((v, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setVariantIndex(i)}
+                  className={
+                    'px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 border ' +
+                    (i === variantIndex
+                      ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
+                      : 'bg-white/5 border-white/15')
+                  }
+                >
+                  {v.color || 'Variant ' + (i + 1)}
+                </button>
+              ))}
+            </div>
+
             <div>
-              <label className="block font-bold mb-2">Photos</label>
+              <label className="block font-bold mb-2">Color / option name</label>
+              <input
+                value={currentVariant.color}
+                onChange={(e) => updateVariant('color', e.target.value)}
+                placeholder="e.g. Red, 500ml, Classic"
+                className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3.5 text-white placeholder-white/30 focus:border-[#D4AF37] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold mb-2">Images</label>
               <div className="flex flex-wrap gap-2">
                 {currentVariant.images.map((img, i) => (
-                  <div key={i} className="relative w-24 h-24 rounded-lg overflow-hidden bg-white/10">
+                  <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden">
                     <img src={img} alt="" className="w-full h-full object-cover" />
                     <button
                       type="button"
@@ -536,25 +549,16 @@ export default function CreateListingPage() {
                           currentVariant.images.filter((_, j) => j !== i),
                         )
                       }
-                      className="absolute top-1 right-1 w-6 h-6 bg-black/70 rounded-full flex items-center justify-center"
+                      className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/70 rounded-full text-xs"
                     >
-                      <X size={12} />
+                      ×
                     </button>
                   </div>
                 ))}
                 {currentVariant.images.length < 5 && (
-                  <label className="w-24 h-24 rounded-lg border border-dashed border-white/30 flex flex-col items-center justify-center cursor-pointer">
-                    <Upload size={18} className="text-white/50" />
-                    <span className="text-[10px] text-white/40 mt-1">
-                      {uploading ? 'Uploading…' : 'Add'}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={handleImageSelect}
-                    />
+                  <label className="w-20 h-20 rounded-lg border border-dashed border-white/25 flex flex-col items-center justify-center cursor-pointer">
+                    <Upload size={18} className="text-white/40" />
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
                   </label>
                 )}
               </div>
@@ -562,73 +566,38 @@ export default function CreateListingPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold mb-2">Price (GHS)</label>
+                <label className="block font-bold mb-2">
+                  {foodHubType === 'drinks' ? 'Price per pack' : 'Price'}
+                </label>
                 <input
-                  value={currentVariant.price}
-                  onChange={(e) => updateVariant('price', e.target.value)}
                   type="number"
                   min="0"
                   step="0.01"
+                  value={currentVariant.price}
+                  onChange={(e) => updateVariant('price', e.target.value)}
                   placeholder="0.00"
-                  className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] focus:outline-none"
+                  className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3.5 text-white placeholder-white/30 focus:border-[#D4AF37] focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block font-bold mb-2">Stock</label>
+                <label className="block font-bold mb-2">
+                  {foodHubType === 'drinks' ? 'Stock (number of packs)' : 'Stock'}
+                </label>
+                {foodHubType === 'drinks' && packPieces && (
+                  <p className="text-white/45 text-xs mb-2">
+                    Each pack has {packPieces} {packUnitLabel}. Price is per pack.
+                  </p>
+                )}
                 <input
-                  value={currentVariant.stockQuantity}
-                  onChange={(e) => updateVariant('stockQuantity', e.target.value)}
                   type="number"
                   min="0"
-                  placeholder="0"
-                  className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] focus:outline-none"
+                  value={currentVariant.stockQuantity}
+                  onChange={(e) => updateVariant('stockQuantity', e.target.value)}
+                  placeholder={foodHubType === 'drinks' ? 'Packs in stock' : '0'}
+                  className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3.5 text-white placeholder-white/30 focus:border-[#D4AF37] focus:outline-none"
                 />
               </div>
             </div>
-
-            {needsPerVariantSizes && (
-              <div>
-                <label className="block font-bold mb-2">Sizes</label>
-                <div className="flex flex-wrap gap-2">
-                  {(sizeOptions || []).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => toggleVariantSize(s)}
-                      className={
-                        'px-3 py-1.5 rounded-full text-sm border ' +
-                        (currentVariant.sizes.includes(s)
-                          ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
-                          : 'bg-white/5 text-white border-white/15')
-                      }
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={customSizeInput}
-                    onChange={(e) => setCustomSizeInput(e.target.value)}
-                    placeholder="Custom size"
-                    className="flex-1 bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-white text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const v = customSizeInput.trim();
-                      if (v) {
-                        toggleVariantSize(v);
-                        setCustomSizeInput('');
-                      }
-                    }}
-                    className="px-3 py-2 bg-white/10 rounded-xl text-sm"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-            )}
 
             <button
               type="button"
