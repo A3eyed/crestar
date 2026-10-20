@@ -1,6 +1,6 @@
 // @ts-nocheck
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import useUser from "@/utils/useUser";
 import useLocalization from "@/utils/useLocalization";
 
@@ -9,12 +9,43 @@ const INACTIVE = "#9CA3AF";
 
 export default function BottomNav() {
   const [currentPath, setCurrentPath] = useState("");
+  const [badgeTotal, setBadgeTotal] = useState(0);
   const { data: user } = useUser();
   const { t } = useLocalization();
 
   useEffect(() => {
     setCurrentPath(window.location.pathname || "/");
   }, []);
+
+  const loadCounts = useCallback(async () => {
+    if (!user?.id) {
+      setBadgeTotal(0);
+      return;
+    }
+    try {
+      const res = await fetch("/api/notifications?counts=1", {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBadgeTotal(Number(data.counts?.total) || 0);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadCounts();
+    if (!user?.id) return;
+    const id = setInterval(loadCounts, 25000);
+    const onFocus = () => loadCounts();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [user?.id, loadCounts]);
 
   const profilePath = user ? "/profile" : "/account/signin";
   const profileLabel = user ? t("profile") : t("signIn");
@@ -35,6 +66,7 @@ export default function BottomNav() {
       label: profileLabel,
       path: profilePath,
       icon: ProfileIcon,
+      badge: user ? badgeTotal : 0,
     },
   ];
 
@@ -73,13 +105,21 @@ export default function BottomNav() {
           }
 
           const Icon = item.icon;
+          const badge = Number(item.badge) || 0;
           return (
             <a
               key={item.id}
               href={item.path}
-              className="flex flex-1 flex-col items-center justify-center gap-1 py-2"
+              className="relative flex flex-1 flex-col items-center justify-center gap-1 py-2"
             >
-              <Icon color={color} />
+              <span className="relative inline-flex">
+                <Icon color={color} />
+                {badge > 0 && (
+                  <span className="absolute -right-2 -top-1.5 min-w-[16px] h-4 px-1 rounded-full bg-[#FE2C55] text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
+              </span>
               <span className="text-[11px] font-semibold" style={{ color }}>
                 {item.label}
               </span>
@@ -93,72 +133,32 @@ export default function BottomNav() {
 
 function HomeIcon({ color }) {
   return (
-    <svg
-      className="h-6 w-6"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke={color}
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-      />
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke={color} strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
     </svg>
   );
 }
 
 function ShopIcon({ color }) {
   return (
-    <svg
-      className="h-6 w-6"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke={color}
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-      />
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke={color} strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
     </svg>
   );
 }
 
 function FoodIcon({ color }) {
   return (
-    <svg
-      className="h-6 w-6"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke={color}
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"
-      />
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke={color} strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
     </svg>
   );
 }
 
 function ProfileIcon({ color }) {
   return (
-    <svg
-      className="h-6 w-6"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke={color}
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-      />
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke={color} strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
     </svg>
   );
 }
