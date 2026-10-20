@@ -106,7 +106,6 @@ export async function ensureCoreSchema() {
       steps,
     );
 
-    // Critical: upgrade stub tables that already existed with fewer columns
     const bcCols = [
       ['status', `text DEFAULT 'active'`],
       ['full_name', 'text'],
@@ -139,12 +138,27 @@ export async function ensureCoreSchema() {
     ];
 
     for (const [col, typ] of bcCols) {
-      await run(`bc.${col}`, () => sql.query(`ALTER TABLE public.business_centers ADD COLUMN IF NOT EXISTS ${col} ${typ}`), steps);
+      await run(
+        `bc.${col}`,
+        () => sql.query(`ALTER TABLE public.business_centers ADD COLUMN IF NOT EXISTS ${col} ${typ}`),
+        steps,
+      );
     }
 
+    // Critical: stub auth_users may exist without profile fields — edits would 500
     const auCols = [
       ['identity_id', 'uuid'],
+      ['email', 'text'],
+      ['name', 'text'],
+      ['username', 'text'],
+      ['display_name', 'text'],
+      ['profile_image', 'text'],
       ['bio', 'text'],
+      ['phone', 'text'],
+      ['role', `text DEFAULT 'user'`],
+      ['is_admin', 'boolean DEFAULT false'],
+      ['is_verified', 'boolean DEFAULT false'],
+      ['is_system_account', 'boolean DEFAULT false'],
       ['followers_count', 'integer DEFAULT 0'],
       ['following_count', 'integer DEFAULT 0'],
       ['email_verified', 'boolean DEFAULT false'],
@@ -154,10 +168,25 @@ export async function ensureCoreSchema() {
       ['username_last_changed', 'timestamp without time zone'],
       ['username_change_count', 'integer DEFAULT 0'],
       ['business_name', 'text'],
+      ['created_at', 'timestamp without time zone DEFAULT now()'],
+      ['updated_at', 'timestamp without time zone DEFAULT now()'],
     ];
     for (const [col, typ] of auCols) {
-      await run(`au.${col}`, () => sql.query(`ALTER TABLE public.auth_users ADD COLUMN IF NOT EXISTS ${col} ${typ}`), steps);
+      await run(
+        `au.${col}`,
+        () => sql.query(`ALTER TABLE public.auth_users ADD COLUMN IF NOT EXISTS ${col} ${typ}`),
+        steps,
+      );
     }
+
+    await run(
+      'idx_auth_users_username_lower',
+      () =>
+        sql.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS auth_users_username_lower_uidx ON public.auth_users (LOWER(username)) WHERE username IS NOT NULL AND username <> ''`,
+        ),
+      steps,
+    );
 
     await run(
       'wallet_accounts',
@@ -241,7 +270,6 @@ export async function ensureCoreSchema() {
     );
 
     const failed = steps.filter((s) => !s.ok);
-    // Don't cache success if column upgrades failed — allow retry
     _done = failed.length === 0;
     return { ok: failed.length === 0, steps, failed };
   })();
