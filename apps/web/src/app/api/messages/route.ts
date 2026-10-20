@@ -3,87 +3,127 @@ import sql from '@/app/api/utils/sql';
 import { resolveUserId } from '@/app/api/utils/auth';
 import { createNotification, notifyWithEmail, getUserDisplayName } from '@/app/api/utils/notify';
 
-// Helper to get a consistent conversation ID between two users
 function getConversationId(userId1, userId2) {
-  const sorted = [userId1.toString(), userId2.toString()].sort();
+  const sorted = [String(userId1), String(userId2)].sort();
   return `conv_${sorted[0]}_${sorted[1]}`;
 }
 
+async function resolvePartnerId(raw) {
+  const key = String(raw || '').trim().replace(/^@+/, '');
+  if (!key) return null;
+  const [row] = await sql`
+    SELECT id, username, display_name, name, profile_image, is_verified, is_system_account
+    FROM auth_users
+    WHERE id::text = ${key} OR lower(username) = lower(${key})
+    LIMIT 1
+  `;
+  return row || null;
+}
+
 // GET /api/messages?partnerId=XX — fetch messages with a specific user
+// GET /api/messages — conversation list (newest first)
 export async function GET(request) {
   try {
     const userId = await resolveUserId(request);
     if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const me = String(userId);
 
     const url = new URL(request.url);
-    const partnerId = url.searchParams.get('partnerId');
+    const partnerParam = url.searchParams.get('partnerId') || url.searchParams.get('userId');
 
-    if (!partnerId) {
-      // Return conversation list
+    if (!partnerParam) {
+      // Conversation list — order by last message time (TikTok-style)
       const conversations = await sql(
-        `SELECT DISTINCT ON (m.conversation_id)
-          m.conversation_id,
-          m.message_text AS last_message,
-          m.created_at AS last_message_at,
-          m.sender_user_id,
-          CASE 
-            WHEN m.sender_user_id = $1 THEN m.receiver_user_id
-            ELSE m.sender_user_id
-          END AS partner_id,
-          u.username AS partner_username,
-          u.display_name AS partner_display_name,
-          u.profile_image AS partner_avatar,
-          u.is_verified AS partner_verified,
-          u.is_system_account AS partner_system,
-          (SELECT COUNT(*) FROM messages WHERE conversation_id = m.conversation_id AND receiver_user_id = $1 AND is_read = false)::int AS unread_count
-        FROM messages m
-        JOIN auth_users u ON u.id::text = CASE 
-          WHEN m.sender_user_id = $1 THEN m.receiver_user_id
-          ELSE m.sender_user_id
-        END
-        WHERE m.sender_user_id = $1 OR m.receiver_user_id = $1
-        ORDER BY m.conversation_id, m.created_at DESC`,
-        [userId]
+        `WITH latest AS (
+           SELECT DISTINCT ON (m.conversation_id)
+             m.conversation_id,
+             m.message_text AS last_message,
+             m.created_at AS last_message_at,
+             m.sender_user_id,
+             CASE
+               WHEN m.sender_user_id = $1 THEN m.receiver_user_id
+               ELSE m.sender_user_id
+             END AS partner_id
+           FROM messages m
+           WHERE m.sender_user_id = $1 OR m.receiver_user_id = $1
+           ORDER BY m.conversation_id, m.created_at DESC
+         )
+         SELECT
+           l.*,
+           u.username AS partner_username,
+           COALESCE(u.display_name, u.name) AS partner_display_name,
+           u.profile_image AS partner_avatar,
+           u.is_verified AS partner_verified,
+           u.is_system_account AS partner_system,
+           (SELECT COUNT(*)::int FROM messages
+             WHERE conversation_id = l.conversation_id
+               AND receiver_user_id = $1 AND is_read = false) AS unread_count
+         FROM latest l
+         LEFT JOIN auth_users u ON u.id::text = l.partner_id
+         ORDER BY l.last_message_at DESC`,
+        [me],
       );
 
       return Response.json({ conversations });
     }
 
-    // Fetch messages for a specific conversation
-    const conversationId = getConversationId(userId, partnerId);
+    const partner = await resolvePartnerId(partnerParam);
+    if (!partner) {
+      return Response.json({ error: 'User not found' }, { status: 404 });
+    }
+    const partnerId = String(partner.id);
+
+    // Support thread with @Crestar uses support_<userId>
+    let conversationId = getConversationId(me, partnerId);
+    if (partner.is_system_account || String(partner.username || '').toLowerCase() === 'crestar') {
+      conversationId = `support_${me}`;
+    }
 
     const messages = await sql(
-      `SELECT m.*, 
+      `SELECT m.*,
         su.username AS sender_username,
-        su.display_name AS sender_display_name,
+        COALESCE(su.display_name, su.name) AS sender_display_name,
         su.is_verified AS sender_verified,
         su.is_system_account AS sender_system
       FROM messages m
-      JOIN auth_users su ON su.id::text = m.sender_user_id
+      LEFT JOIN auth_users su ON su.id::text = m.sender_user_id
       WHERE m.conversation_id = $1
+         OR (m.conversation_id = $2)
       ORDER BY m.created_at ASC
-      LIMIT 100`,
-      [conversationId]
+      LIMIT 200`,
+      [conversationId, getConversationId(me, partnerId)],
     );
 
-    // Mark received messages as read
+    // Deduplicate if both ids matched somehow
+    const seen = new Set();
+    const unique = [];
+    for (const m of messages) {
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      unique.push(m);
+    }
+
     await sql(
-      `UPDATE messages SET is_read = true 
-       WHERE conversation_id = $1 AND receiver_user_id = $2 AND is_read = false`,
-      [conversationId, userId]
+      `UPDATE messages SET is_read = true
+       WHERE (conversation_id = $1 OR conversation_id = $2)
+         AND receiver_user_id = $3 AND is_read = false`,
+      [conversationId, getConversationId(me, partnerId), me],
     );
 
-    // Get partner info
-    const partnerRows = await sql(
-      `SELECT id, username, display_name, profile_image, is_verified, is_system_account
-       FROM auth_users WHERE id = $1`,
-      [parseInt(partnerId)]
-    );
-    const partner = partnerRows[0] || null;
-
-    return Response.json({ messages, partner });
+    return Response.json({
+      messages: unique,
+      partner: {
+        id: partnerId,
+        username: partner.username,
+        display_name: partner.display_name || partner.name,
+        profile_image: partner.profile_image,
+        is_verified: partner.is_verified,
+        is_system_account: partner.is_system_account,
+      },
+      conversationId,
+    });
   } catch (error) {
     console.error('Get messages error:', error);
     return Response.json({ error: 'Failed to fetch messages' }, { status: 500 });
@@ -97,6 +137,7 @@ export async function POST(request) {
     if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const me = String(userId);
 
     const body = await request.json();
     const { receiverId, message } = body;
@@ -105,29 +146,34 @@ export async function POST(request) {
       return Response.json({ error: 'Receiver and message are required' }, { status: 400 });
     }
 
-    const conversationId = getConversationId(userId, receiverId);
+    const partner = await resolvePartnerId(receiverId);
+    if (!partner) {
+      return Response.json({ error: 'Recipient not found' }, { status: 404 });
+    }
+    const toId = String(partner.id);
+
+    if (toId === me) {
+      return Response.json({ error: 'Cannot message yourself' }, { status: 400 });
+    }
+
+    let conversationId = getConversationId(me, toId);
+    if (partner.is_system_account || String(partner.username || '').toLowerCase() === 'crestar') {
+      conversationId = `support_${me}`;
+    }
 
     const result = await sql(
       `INSERT INTO messages (conversation_id, sender_user_id, receiver_user_id, message_text)
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [conversationId, userId, receiverId.toString(), message.trim()]
+      [conversationId, me, toId, message.trim()],
     );
 
     const newMessage = result[0];
 
-    // Notification for the receiver (skip system accounts).
-    // If the two users share an ACTIVE order, also send an email so sellers
-    // never miss delivery questions from buyers (and vice versa).
     try {
-      const receiverIsSystem = await sql(
-        `SELECT 1 FROM auth_users WHERE id = $1 AND is_system_account = true`,
-        [parseInt(receiverId)]
-      );
-      if (receiverIsSystem.length === 0) {
-        const senderName = await getUserDisplayName(userId);
+      if (!partner.is_system_account) {
+        const senderName = await getUserDisplayName(me);
         const preview = message.trim().slice(0, 80);
 
-        // Check for an active order between the two users (either direction)
         let activeOrder = null;
         try {
           const activeOrders = await sql(
@@ -135,7 +181,7 @@ export async function POST(request) {
              WHERE ((buyer_id = $1 AND seller_id = $2) OR (buyer_id = $2 AND seller_id = $1))
                AND status IN ('paid', 'preparing', 'ready_for_pickup', 'in_transit', 'delivered')
              ORDER BY created_at DESC LIMIT 1`,
-            [userId, receiverId.toString()]
+            [me, toId],
           );
           activeOrder = activeOrders[0] || null;
         } catch (orderCheckErr) {
@@ -143,13 +189,13 @@ export async function POST(request) {
         }
 
         const notificationPayload = {
-          userId: receiverId,
+          userId: toId,
           type: 'message',
           title: '✉️ New Message',
           body: `${senderName}: "${preview}"`,
           data: {
             conversation_id: conversationId,
-            from_user_id: userId,
+            from_user_id: me,
             message_id: newMessage?.id || null,
             order_id: activeOrder?.id || null,
           },
@@ -178,26 +224,19 @@ export async function POST(request) {
       console.error('Message notification failed:', notifyErr);
     }
 
-    // If the receiver is a Crestar system account, auto-reply
-    const systemAccounts = await sql(
-      `SELECT id, username FROM auth_users WHERE is_system_account = true AND id = $1`,
-      [parseInt(receiverId)]
-    );
-
-    if (systemAccounts.length > 0) {
-      // Auto-reply from Crestar support after a brief moment
-      const systemAccount = systemAccounts[0];
+    // Auto-reply from system accounts (support)
+    if (partner.is_system_account) {
       const autoReplyText =
         'Thank you for reaching out! Our support team has received your message. A team member will review and respond to you shortly. In the meantime, feel free to share any additional details about your issue.';
 
       await sql(
         `INSERT INTO messages (conversation_id, sender_user_id, receiver_user_id, message_text)
          VALUES ($1, $2, $3, $4)`,
-        [conversationId, receiverId.toString(), userId, autoReplyText]
+        [conversationId, toId, me, autoReplyText],
       );
     }
 
-    return Response.json({ success: true, message: newMessage });
+    return Response.json({ success: true, message: newMessage, conversationId });
   } catch (error) {
     console.error('Send message error:', error);
     return Response.json({ error: 'Failed to send message' }, { status: 500 });
