@@ -2,21 +2,24 @@
 import sql from '@/app/api/utils/sql';
 import { resolveUserId, getSession } from '@/app/api/utils/auth';
 import { ensureAppUser } from '@/app/api/utils/ensureAppUser';
+import { ensureCoreSchema } from '@/app/api/utils/ensureSchema';
 
 export async function POST(request) {
   try {
+    await ensureCoreSchema();
+
     const body = await request.json();
     const displayName =
-      body.displayName != null ? String(body.displayName).trim() : null;
-    const bio = body.bio != null ? String(body.bio).trim() : null;
+      body.displayName != null ? String(body.displayName).trim() : undefined;
+    const bio = body.bio != null ? String(body.bio).trim() : undefined;
     const profileImage =
-      body.profileImage != null ? String(body.profileImage).trim() : null;
-    const email = body.email != null ? String(body.email).trim() : null;
-    const phone = body.phone != null ? String(body.phone).trim() : null;
+      body.profileImage != null ? String(body.profileImage).trim() : undefined;
+    const email = body.email != null ? String(body.email).trim() : undefined;
+    const phone = body.phone != null ? String(body.phone).trim() : undefined;
 
     const userId = await resolveUserId(request);
     if (!userId) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json({ error: 'Unauthorized — please sign in again' }, { status: 401 });
     }
 
     const session = await getSession(request);
@@ -26,22 +29,22 @@ export async function POST(request) {
       image: session?.user?.image,
     });
 
-    if (displayName && displayName.length > 30) {
+    if (displayName !== undefined && displayName.length > 30) {
       return Response.json(
         { error: 'Display name must be 30 characters or less' },
         { status: 400 },
       );
     }
 
-    if (bio && bio.length > 80) {
+    if (bio !== undefined && bio.length > 80) {
       return Response.json({ error: 'Bio must be 80 characters or less' }, { status: 400 });
     }
 
-    if (email && !email.includes('@')) {
+    if (email !== undefined && email && !email.includes('@')) {
       return Response.json({ error: 'Invalid email format' }, { status: 400 });
     }
 
-    if (phone && phone.length < 10) {
+    if (phone !== undefined && phone && phone.length < 10) {
       return Response.json({ error: 'Invalid phone number' }, { status: 400 });
     }
 
@@ -55,33 +58,59 @@ export async function POST(request) {
       }
     }
 
+    // Explicit field updates (avoid CASE + null param edge cases)
+    const [current] = await sql`
+      SELECT id, username, email, display_name, bio, profile_image, name, phone, is_verified, role
+      FROM auth_users WHERE id = ${userId}
+    `;
+    if (!current) {
+      return Response.json({ error: 'Profile row not found' }, { status: 404 });
+    }
+
+    const nextDisplayName = displayName !== undefined ? displayName : current.display_name;
+    const nextName = displayName !== undefined ? displayName : current.name;
+    const nextBio = bio !== undefined ? bio : current.bio;
+    const nextImage = profileImage !== undefined ? profileImage || null : current.profile_image;
+    const nextEmail = email !== undefined ? email : current.email;
+    const nextPhone = phone !== undefined ? phone : current.phone;
+
     const [updatedUser] = await sql`
       UPDATE auth_users
       SET
-        display_name = CASE WHEN ${displayName}::text IS NOT NULL THEN ${displayName} ELSE display_name END,
-        name = CASE WHEN ${displayName}::text IS NOT NULL THEN ${displayName} ELSE name END,
-        bio = CASE WHEN ${bio}::text IS NOT NULL THEN ${bio} ELSE bio END,
-        profile_image = CASE WHEN ${profileImage}::text IS NOT NULL THEN ${profileImage} ELSE profile_image END,
-        email = CASE WHEN ${email}::text IS NOT NULL THEN ${email} ELSE email END,
-        phone = CASE WHEN ${phone}::text IS NOT NULL THEN ${phone} ELSE phone END,
+        display_name = ${nextDisplayName},
+        name = ${nextName},
+        bio = ${nextBio},
+        profile_image = ${nextImage},
+        email = ${nextEmail},
+        phone = ${nextPhone},
         updated_at = NOW()
       WHERE id = ${userId}
       RETURNING id, username, email, display_name, bio, profile_image, name, phone, is_verified, role
     `;
 
-    if (!updatedUser) {
-      return Response.json({ error: 'Profile row not found' }, { status: 404 });
-    }
-
-    // Best-effort sync to Neon Auth name/image (public API preferred later)
+    // Best-effort sync name/image into Neon Auth user (session avatar)
     try {
-      if (displayName) {
-        await sql`UPDATE neon_auth."user" SET name = ${displayName}, "updatedAt" = NOW() WHERE id = ${userId}`;
+      if (nextDisplayName || nextImage) {
+        await sql`
+          UPDATE neon_auth."user"
+          SET
+            name = COALESCE(${nextDisplayName}, name),
+            image = COALESCE(${nextImage}, image),
+            "updatedAt" = NOW()
+          WHERE id = ${userId}
+        `;
       }
     } catch {
       try {
-        if (displayName) {
-          await sql`UPDATE neon_auth.user SET name = ${displayName}, "updatedAt" = NOW() WHERE id = ${userId}`;
+        if (nextDisplayName || nextImage) {
+          await sql`
+            UPDATE neon_auth.user
+            SET
+              name = COALESCE(${nextDisplayName}, name),
+              image = COALESCE(${nextImage}, image),
+              "updatedAt" = NOW()
+            WHERE id = ${userId}
+          `;
         }
       } catch {
         /* ignore */
@@ -104,6 +133,8 @@ export async function POST(request) {
 
 export async function GET(request) {
   try {
+    await ensureCoreSchema();
+
     const userId = await resolveUserId(request);
     if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
