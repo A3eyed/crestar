@@ -29,20 +29,15 @@ export async function POST(request) {
       foodSubcategory,
       foodAttributes,
       drinkAttributes,
-      // Advanced sizing metadata
       sizingCategory,
       sizeSystem,
       sizeType,
       dimensionalSpecs,
       variants,
-      // Affiliate marketing (TikTok Shop style)
       creatorPromotionEnabled,
       affiliateCommissionRate,
     } = body;
 
-    // Reroute: products listed by Food & Drink sellers always go to the FoodHub.
-    // If the seller's only selling center is 'foodhub' (or legacy seller_type is
-    // 'food_beverage'), force the product type to 'food_beverage'.
     let effectiveProductType = productType;
     try {
       const [sellerFlags] = await sql`
@@ -77,9 +72,28 @@ export async function POST(request) {
             .toLowerCase()
             .includes('drink')
           ? 'drinks'
-          : 'food'
+          : foodHubType === 'drinks'
+            ? 'drinks'
+            : 'food'
         : null;
-    const minOrderQty = normalizedFoodHubType === 'drinks' ? 5 : 1;
+
+    // Drinks sell by the pack — minimum is 1 pack (not 5 loose pieces)
+    let drinkAttrs = drinkAttributes || {};
+    if (normalizedFoodHubType === 'drinks') {
+      const pieces = parseInt(drinkAttrs.piecesPerPack, 10);
+      if (!Number.isFinite(pieces) || pieces < 1) {
+        return Response.json(
+          { error: 'Drinks must specify how many pieces are in each pack' },
+          { status: 400 },
+        );
+      }
+      drinkAttrs = {
+        soldBy: 'pack',
+        piecesPerPack: pieces,
+        unitLabel: drinkAttrs.unitLabel || 'pieces',
+      };
+    }
+    const minOrderQty = 1;
 
     const [product] = await sql`
       INSERT INTO products (
@@ -130,7 +144,7 @@ export async function POST(request) {
         ${normalizedFoodHubType},
         ${foodSubcategory || category || null},
         ${JSON.stringify(foodAttributes || {})},
-        ${JSON.stringify(drinkAttributes || {})},
+        ${JSON.stringify(drinkAttrs || {})},
         ${sizingCategory || null},
         ${sizeSystem || null},
         ${sizeType || null},
@@ -194,7 +208,6 @@ export async function GET(request) {
     const isTodaysSpecial = searchParams.get('isTodaysSpecial');
     const promotable = searchParams.get('promotable');
 
-    // Build query with joins to get seller info
     let queryString = `
       SELECT 
         p.*,
@@ -205,8 +218,6 @@ export async function GET(request) {
           NULLIF(TRIM(prof.business_name), ''),
           NULLIF(TRIM(bc.business_name), '')
         ) as seller_business_name,
-        -- Single field every card should render: official business name first,
-        -- falling back through display name to the handle.
         COALESCE(
           NULLIF(TRIM(u.business_name), ''),
           NULLIF(TRIM(prof.business_name), ''),
@@ -264,7 +275,6 @@ export async function GET(request) {
       values.push(true);
       paramIndex++;
     }
-    // Only show products that sellers have enabled for creator promotion
     if (promotable === 'true') {
       queryString += ` AND p.creator_promotion_enabled = true AND (p.stock_quantity IS NULL OR p.stock_quantity > 0)`;
     }
@@ -280,9 +290,6 @@ export async function GET(request) {
   }
 }
 
-/**
- * Update Product (PUT)
- */
 export async function PUT(request) {
   try {
     const userId = await resolveUserId(request);
@@ -310,12 +317,11 @@ export async function PUT(request) {
       foodSubcategory,
       foodAttributes,
       drinkAttributes,
-      // Advanced sizing metadata
       sizingCategory,
       sizeSystem,
       sizeType,
       dimensionalSpecs,
-      sizes, // sizes array for the product's variants (edit-product passes this)
+      sizes,
       creatorPromotionEnabled,
       affiliateCommissionRate,
     } = body;
@@ -365,7 +371,6 @@ export async function PUT(request) {
       RETURNING *
     `;
 
-    // If sizes are provided, update all variants for this product
     if (sizes && Array.isArray(sizes)) {
       await sql`
         UPDATE product_variants
@@ -381,12 +386,6 @@ export async function PUT(request) {
   }
 }
 
-/**
- * Partial update (PATCH) — affiliate marketing settings only.
- * Used by the Seller Center to toggle a product's availability for
- * creator promotion and set its commission rate without touching
- * any other product fields.
- */
 export async function PATCH(request) {
   try {
     const userId = await resolveUserId(request);
@@ -432,9 +431,6 @@ export async function PATCH(request) {
   }
 }
 
-/**
- * Delete Product (DELETE)
- */
 export async function DELETE(request) {
   try {
     const userId = await resolveUserId(request);
@@ -449,7 +445,6 @@ export async function DELETE(request) {
       return Response.json({ error: 'Product ID required' }, { status: 400 });
     }
 
-    // Verify product ownership
     const [existing] = await sql`
       SELECT seller_id FROM products WHERE id = ${id}
     `;
@@ -462,7 +457,6 @@ export async function DELETE(request) {
       return Response.json({ error: 'You can only delete your own products' }, { status: 403 });
     }
 
-    // Soft delete by setting status to 'archived'
     await sql`
       UPDATE products SET status = 'archived', updated_at = NOW()
       WHERE id = ${id}
