@@ -60,86 +60,108 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (!userLoading && !user) {
-      window.location.href = '/account/signin?callbackUrl=/inbox';
+      const qs = typeof window !== 'undefined' ? window.location.search : '';
+      window.location.href =
+        '/account/signin?callbackUrl=' + encodeURIComponent('/inbox' + qs);
       return;
     }
     if (user?.id) fetchConversations();
   }, [user?.id, userLoading, fetchConversations]);
 
-  const loadMessages = useCallback(async (partnerId) => {
+  const loadMessages = useCallback(async ({ partnerId, conversationId } = {}) => {
+    if (!partnerId && !conversationId) return;
     try {
       setLoadingMessages(true);
       setSendError('');
-      const res = await fetch(
-        `/api/messages?partnerId=${encodeURIComponent(partnerId)}`,
-        { credentials: 'include' },
-      );
+      const qs = conversationId
+        ? `conversationId=${encodeURIComponent(conversationId)}`
+        : `partnerId=${encodeURIComponent(partnerId)}`;
+      const res = await fetch(`/api/messages?${qs}`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setMessages(data.messages || []);
         if (data.partner) {
-          setActivePartner((prev) => ({
+          setActivePartner({
             id: String(data.partner.id),
             username: data.partner.username,
-            displayName: data.partner.display_name || data.partner.username,
+            displayName:
+              data.partner.is_system_account
+                ? data.partner.display_name || 'Crestar'
+                : data.partner.display_name || data.partner.username,
             avatar: data.partner.profile_image,
             verified: data.partner.is_verified,
-            system: data.partner.is_system_account,
-            ...(prev || {}),
-            // Prefer API truth for id
-            id: String(data.partner.id),
-            username: data.partner.username || prev?.username,
-            displayName:
-              data.partner.display_name ||
-              prev?.displayName ||
-              data.partner.username,
-            avatar: data.partner.profile_image || prev?.avatar,
-            verified: data.partner.is_verified ?? prev?.verified,
-          }));
+            system: !!data.partner.is_system_account,
+            conversationId: data.conversationId || conversationId || null,
+          });
         }
         setTimeout(
           () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }),
           80,
         );
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSendError(data.error || 'Could not open conversation');
       }
     } catch (err) {
       console.error('Failed to load messages:', err);
+      setSendError('Could not open conversation');
     } finally {
       setLoadingMessages(false);
     }
   }, []);
 
   const openConversation = async (conv) => {
+    const isSupport =
+      String(conv.conversation_id || '').startsWith('support_') ||
+      !!conv.partner_system;
     const partner = {
-      id: String(conv.partner_id),
-      username: conv.partner_username,
-      displayName: conv.partner_display_name || conv.partner_username,
+      id: String(conv.partner_id || ''),
+      username: conv.partner_username || (isSupport ? 'crestar' : ''),
+      displayName:
+        isSupport
+          ? 'Crestar'
+          : conv.partner_display_name || conv.partner_username || 'User',
       avatar: conv.partner_avatar,
-      verified: conv.partner_verified,
-      system: conv.partner_system,
+      verified: conv.partner_verified || isSupport,
+      system: isSupport,
+      conversationId: conv.conversation_id,
     };
     setActivePartner(partner);
-    await loadMessages(partner.id);
+    await loadMessages({
+      partnerId: partner.id || undefined,
+      conversationId: isSupport ? conv.conversation_id : undefined,
+    });
   };
 
-  // Deep link: /inbox?userId=… or ?partnerId=… (from profile Message)
+  // Deep link: /inbox?userId=… | partnerId=… | conversationId=support_…
   useEffect(() => {
     if (!user?.id || deepLinkHandled.current) return;
+    if (typeof window === 'undefined') return;
+
     const params = new URLSearchParams(window.location.search);
     const target =
       params.get('userId') || params.get('partnerId') || params.get('to');
-    if (!target) return;
+    const conversationId = params.get('conversationId');
+    if (!target && !conversationId) return;
+
     deepLinkHandled.current = true;
 
     (async () => {
-      setActivePartner({ id: String(target) });
-      await loadMessages(target);
-      // Clean URL without losing history
+      if (target) {
+        setActivePartner({ id: String(target) });
+      } else {
+        setActivePartner({ id: 'support', system: true, displayName: 'Crestar' });
+      }
+      await loadMessages({
+        partnerId: target || undefined,
+        conversationId: conversationId || undefined,
+      });
       try {
         const url = new URL(window.location.href);
         url.searchParams.delete('userId');
         url.searchParams.delete('partnerId');
         url.searchParams.delete('to');
+        url.searchParams.delete('conversationId');
         window.history.replaceState({}, '', url.pathname + (url.search || ''));
       } catch {}
     })();
@@ -151,7 +173,6 @@ export default function InboxPage() {
     setSending(true);
     setSendError('');
 
-    // Optimistic bubble (TikTok-feel)
     const tempId = `temp_${Date.now()}`;
     const optimistic = {
       id: tempId,
@@ -181,7 +202,10 @@ export default function InboxPage() {
         setSendError(data.error || 'Failed to send');
         return;
       }
-      await loadMessages(activePartner.id);
+      await loadMessages({
+        partnerId: activePartner.id,
+        conversationId: activePartner.conversationId || undefined,
+      });
       fetchConversations();
     } catch (err) {
       console.error('Send failed:', err);
@@ -213,14 +237,17 @@ export default function InboxPage() {
 
   if (!user) return null;
 
-  // ── Chat view ──
   if (activePartner) {
     const title =
-      activePartner.displayName ||
-      (activePartner.username ? `@${activePartner.username}` : 'Chat');
-    const profileHref = activePartner.username
-      ? `/${activePartner.username}`
-      : `/seller/${activePartner.id}`;
+      activePartner.system
+        ? 'Crestar'
+        : activePartner.displayName ||
+          (activePartner.username ? `@${activePartner.username}` : 'Chat');
+    const profileHref = activePartner.system
+      ? '/support'
+      : activePartner.username
+        ? `/${activePartner.username}`
+        : `/seller/${activePartner.id}`;
 
     return (
       <div className="min-h-screen bg-black text-white flex flex-col">
@@ -251,13 +278,15 @@ export default function InboxPage() {
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold truncate">{title}</span>
-                  {activePartner.verified && (
+                  {(activePartner.verified || activePartner.system) && (
                     <BadgeCheck size={15} className="text-[#D4AF37] shrink-0" />
                   )}
                 </div>
-                {activePartner.username && (
+                {activePartner.system ? (
+                  <p className="text-white/40 text-xs">Official support</p>
+                ) : activePartner.username ? (
                   <p className="text-white/40 text-xs truncate">@{activePartner.username}</p>
-                )}
+                ) : null}
               </div>
             </a>
           </div>
@@ -303,7 +332,7 @@ export default function InboxPage() {
           <p className="text-center text-red-400 text-xs px-4 pb-1">{sendError}</p>
         )}
 
-        <div className="border-t border-white/10 bg-black safe-area-bottom">
+        <div className="border-t border-white/10 bg-black">
           <div className="max-w-2xl mx-auto px-4 py-3 flex items-end gap-3">
             <textarea
               value={messageText}
@@ -332,7 +361,6 @@ export default function InboxPage() {
     );
   }
 
-  // ── Conversation list ──
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       <div className="sticky top-0 z-20 bg-black border-b border-white/10">
@@ -365,56 +393,64 @@ export default function InboxPage() {
           </div>
         ) : (
           <div className="space-y-0.5">
-            {conversations.map((conv) => (
-              <button
-                key={conv.conversation_id}
-                type="button"
-                onClick={() => openConversation(conv)}
-                className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl hover:bg-white/5 transition-colors text-left"
-              >
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
-                  {conv.partner_avatar ? (
-                    <img src={conv.partner_avatar} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-base font-bold text-white/60">
-                      {(conv.partner_display_name || conv.partner_username || 'U')
-                        .charAt(0)
-                        .toUpperCase()}
+            {conversations.map((conv) => {
+              const isSupport =
+                String(conv.conversation_id || '').startsWith('support_') ||
+                !!conv.partner_system;
+              const name = isSupport
+                ? 'Crestar'
+                : conv.partner_display_name ||
+                  (conv.partner_username ? `@${conv.partner_username}` : 'User');
+              return (
+                <button
+                  key={conv.conversation_id}
+                  type="button"
+                  onClick={() => openConversation(conv)}
+                  className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl hover:bg-white/5 transition-colors text-left"
+                >
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
+                    {conv.partner_avatar ? (
+                      <img
+                        src={conv.partner_avatar}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-base font-bold text-white/60">
+                        {name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-semibold text-sm truncate">{name}</span>
+                        {(conv.partner_verified || isSupport) && (
+                          <BadgeCheck size={14} className="text-[#D4AF37] shrink-0" />
+                        )}
+                      </div>
+                      <span className="text-[11px] text-white/35 shrink-0">
+                        {formatTime(conv.last_message_at)}
+                      </span>
+                    </div>
+                    <p
+                      className={`text-sm truncate mt-0.5 ${
+                        conv.unread_count > 0
+                          ? 'text-white font-medium'
+                          : 'text-white/50'
+                      }`}
+                    >
+                      {conv.last_message}
+                    </p>
+                  </div>
+                  {conv.unread_count > 0 && (
+                    <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#D4AF37] text-black text-xs font-bold flex items-center justify-center shrink-0">
+                      {conv.unread_count}
                     </span>
                   )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-semibold text-sm truncate">
-                        {conv.partner_display_name ||
-                          (conv.partner_username
-                            ? `@${conv.partner_username}`
-                            : 'User')}
-                      </span>
-                      {conv.partner_verified && (
-                        <BadgeCheck size={14} className="text-[#D4AF37] shrink-0" />
-                      )}
-                    </div>
-                    <span className="text-[11px] text-white/35 shrink-0">
-                      {formatTime(conv.last_message_at)}
-                    </span>
-                  </div>
-                  <p
-                    className={`text-sm truncate mt-0.5 ${
-                      conv.unread_count > 0 ? 'text-white font-medium' : 'text-white/50'
-                    }`}
-                  >
-                    {conv.last_message}
-                  </p>
-                </div>
-                {conv.unread_count > 0 && (
-                  <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#D4AF37] text-black text-xs font-bold flex items-center justify-center shrink-0">
-                    {conv.unread_count}
-                  </span>
-                )}
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
