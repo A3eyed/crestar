@@ -38,6 +38,14 @@ export default function AdminModerationPage() {
   const [supportMessages, setSupportMessages] = useState([]);
   const [supportLoading, setSupportLoading] = useState(false);
 
+  // Active support conversation (TikTok/admin inbox style)
+  const [activeThreadUserId, setActiveThreadUserId] = useState(null);
+  const [activeThreadMeta, setActiveThreadMeta] = useState(null);
+  const [threadMessages, setThreadMessages] = useState([]);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [replyBusy, setReplyBusy] = useState(false);
+
   const bootstrappedFor = useRef(null);
 
   const loadUsers = useCallback(async () => {
@@ -62,7 +70,7 @@ export default function AdminModerationPage() {
   const loadSupport = useCallback(async () => {
     setSupportLoading(true);
     try {
-      const res = await adminFetch("/api/admin/support-inbox?limit=15");
+      const res = await adminFetch("/api/admin/support-inbox?limit=20");
       if (res.ok) {
         const data = await res.json();
         setSupportMessages(data.messages || data.inbox || []);
@@ -73,7 +81,70 @@ export default function AdminModerationPage() {
     }
   }, []);
 
-  // Bootstrap once per signed-in admin — never re-run on user object identity
+  const openSupportThread = async (m) => {
+    const uid = m.userId || m.thread_user_id || m.sender_user_id;
+    if (!uid) return;
+    setActiveThreadUserId(String(uid));
+    setActiveThreadMeta({
+      username: m.sender_username || m.username,
+      name: m.sender_name || m.name,
+    });
+    setThreadLoading(true);
+    setReplyText("");
+    try {
+      const res = await adminFetch(`/api/support/chat?userId=${encodeURIComponent(uid)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setThreadMessages(data.messages || []);
+      } else {
+        setThreadMessages([]);
+      }
+      // mark list item read
+      if (m.id) {
+        await adminFetch("/api/admin/support-inbox", {
+          method: "POST",
+          body: JSON.stringify({ action: "mark_read", messageId: m.id }),
+        }).catch(() => {});
+      }
+    } catch {
+      setThreadMessages([]);
+    } finally {
+      setThreadLoading(false);
+    }
+  };
+
+  const sendSupportReply = async () => {
+    if (!activeThreadUserId || !replyText.trim() || replyBusy) return;
+    setReplyBusy(true);
+    try {
+      const res = await adminFetch("/api/admin/support-inbox", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "reply",
+          userId: activeThreadUserId,
+          replyText: replyText.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to send reply");
+      setReplyText("");
+      // Reload thread
+      const r2 = await adminFetch(
+        `/api/support/chat?userId=${encodeURIComponent(activeThreadUserId)}`,
+      );
+      if (r2.ok) {
+        const d2 = await r2.json();
+        setThreadMessages(d2.messages || []);
+      }
+      loadSupport();
+      setMessage({ type: "success", text: "Reply sent as Crestar Support" });
+    } catch (e) {
+      setMessage({ type: "error", text: e.message || "Failed to send reply" });
+    } finally {
+      setReplyBusy(false);
+    }
+  };
+
   useEffect(() => {
     if (!userId || !isAdmin) return;
     if (bootstrappedFor.current === userId) return;
@@ -165,7 +236,7 @@ export default function AdminModerationPage() {
             <h1 className="text-2xl font-semibold text-gray-900">Moderation Center</h1>
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            Warn, suspend, verify, revoke monetization, and broadcast. Verified badge is admin-only.
+            Warn, suspend, verify, revoke monetization, and reply to support as Crestar.
           </p>
         </div>
       </div>
@@ -300,6 +371,18 @@ export default function AdminModerationPage() {
                   ) : (
                     <ActionBtn label="Revoke $ access" busy={actionBusy === "revoke_monetization"} onClick={() => runAction("revoke_monetization")} color="red" />
                   )}
+                  <ActionBtn
+                    label="Open support chat"
+                    busy={false}
+                    onClick={() =>
+                      openSupportThread({
+                        userId: selected.id,
+                        sender_username: selected.username,
+                        sender_name: selected.name,
+                      })
+                    }
+                    color="gold"
+                  />
                 </div>
               </div>
             )}
@@ -336,26 +419,127 @@ export default function AdminModerationPage() {
 
         <section className="bg-white rounded-2xl shadow p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Recent support messages</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Support inbox (Crestar)</h2>
             <button type="button" onClick={loadSupport} className="text-sm text-[#b8960f] font-medium hover:underline">Refresh</button>
           </div>
-          {supportLoading ? (
-            <p className="text-sm text-gray-400">Loading…</p>
-          ) : supportMessages.length === 0 ? (
-            <p className="text-sm text-gray-400">No recent messages.</p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {supportMessages.slice(0, 10).map((m) => (
-                <li key={m.id || m.created_at} className="py-3 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-gray-900">{m.sender_username || m.username || "User"}</span>
-                    <span className="text-xs text-gray-400">{m.created_at ? new Date(m.created_at).toLocaleString() : ""}</span>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              {supportLoading ? (
+                <p className="text-sm text-gray-400">Loading…</p>
+              ) : supportMessages.length === 0 ? (
+                <p className="text-sm text-gray-400">No recent support messages.</p>
+              ) : (
+                <ul className="divide-y divide-gray-100 max-h-[420px] overflow-y-auto">
+                  {supportMessages.slice(0, 20).map((m) => (
+                    <li key={m.id || m.conversation_id || m.created_at}>
+                      <button
+                        type="button"
+                        onClick={() => openSupportThread(m)}
+                        className={`w-full text-left py-3 px-2 rounded-lg hover:bg-gray-50 ${
+                          activeThreadUserId &&
+                          String(activeThreadUserId) === String(m.userId || m.thread_user_id || m.sender_user_id)
+                            ? "bg-[#D4AF37]/10"
+                            : ""
+                        }`}
+                      >
+                        <div className="flex justify-between gap-2">
+                          <span className="font-medium text-gray-900">
+                            @{m.sender_username || m.username || "User"}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {m.created_at ? new Date(m.created_at).toLocaleString() : ""}
+                          </span>
+                        </div>
+                        <p className="text-gray-600 mt-0.5 line-clamp-2 text-sm">
+                          {m.message_text || m.body || m.message || "—"}
+                        </p>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="border border-gray-100 rounded-xl p-4 min-h-[320px] flex flex-col">
+              {!activeThreadUserId ? (
+                <p className="text-sm text-gray-400 text-center py-16">
+                  Click a support message to open the conversation and reply as Crestar.
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        @{activeThreadMeta?.username || "user"}
+                      </p>
+                      <p className="text-xs text-gray-400">Replies appear as Crestar Support</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveThreadUserId(null);
+                        setThreadMessages([]);
+                      }}
+                      className="text-xs text-gray-500 hover:text-gray-800"
+                    >
+                      Close
+                    </button>
                   </div>
-                  <p className="text-gray-600 mt-0.5 line-clamp-2">{m.message_text || m.body || m.message || "—"}</p>
-                </li>
-              ))}
-            </ul>
-          )}
+                  <div className="flex-1 overflow-y-auto space-y-2 max-h-[280px] mb-3">
+                    {threadLoading ? (
+                      <p className="text-sm text-gray-400">Loading thread…</p>
+                    ) : threadMessages.length === 0 ? (
+                      <p className="text-sm text-gray-400">No messages in this thread yet.</p>
+                    ) : (
+                      threadMessages.map((tm) => {
+                        const fromUser =
+                          String(tm.sender_user_id) === String(activeThreadUserId);
+                        return (
+                          <div
+                            key={tm.id}
+                            className={`flex ${fromUser ? "justify-start" : "justify-end"}`}
+                          >
+                            <div
+                              className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                                fromUser
+                                  ? "bg-gray-100 text-gray-900"
+                                  : "bg-[#D4AF37] text-black"
+                              }`}
+                            >
+                              {tm.message_text}
+                              <div className="text-[10px] opacity-60 mt-1">
+                                {tm.created_at
+                                  ? new Date(tm.created_at).toLocaleString()
+                                  : ""}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <textarea
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      rows={2}
+                      placeholder="Reply as Crestar…"
+                      className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={sendSupportReply}
+                      disabled={replyBusy || !replyText.trim()}
+                      className="px-4 py-2 rounded-xl bg-[#D4AF37] text-black font-semibold text-sm disabled:opacity-40 self-end"
+                    >
+                      {replyBusy ? "…" : "Send"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </section>
       </div>
     </div>
