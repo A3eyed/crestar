@@ -1,6 +1,6 @@
 // @ts-nocheck
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import useUser from '@/utils/useUser';
 import CurrencyPrice from '@/components/CurrencyPrice';
 import {
@@ -18,8 +18,6 @@ import {
 } from 'lucide-react';
 
 function goBackFromProfile() {
-  // If we arrived here from a video close that pushed a profile URL, Back would
-  // re-open the video. Prefer feed in that case.
   try {
     const ref = document.referrer;
     if (ref) {
@@ -38,6 +36,99 @@ function goBackFromProfile() {
 }
 
 /**
+ * TikTok-style grid thumbnail.
+ * Prefer stored thumbnail_url; otherwise seek the video to a frame so iOS
+ * Safari does not show a black cell (preload=metadata alone is not enough).
+ */
+function VideoThumb({ thumbnailUrl, videoUrl, className }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (thumbnailUrl) return;
+    const v = videoRef.current;
+    if (!v) return;
+
+    const seekFrame = () => {
+      try {
+        if (v.readyState >= 1 && (v.currentTime < 0.05 || Number.isNaN(v.currentTime))) {
+          const t = Math.min(0.25, (v.duration && Number.isFinite(v.duration) ? v.duration * 0.05 : 0.25));
+          v.currentTime = t > 0 ? t : 0.1;
+        }
+      } catch {
+        /* ignore seek errors */
+      }
+    };
+
+    v.addEventListener('loadedmetadata', seekFrame);
+    v.addEventListener('loadeddata', seekFrame);
+    // Some mobile browsers fire neither until play is attempted
+    try {
+      v.load();
+    } catch {}
+
+    return () => {
+      v.removeEventListener('loadedmetadata', seekFrame);
+      v.removeEventListener('loadeddata', seekFrame);
+    };
+  }, [thumbnailUrl, videoUrl]);
+
+  if (thumbnailUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={thumbnailUrl} alt="" className={className} loading="lazy" />
+    );
+  }
+
+  if (!videoUrl) {
+    return <div className={`${className} bg-white/5`} />;
+  }
+
+  // Media fragment helps Chromium/WebKit paint a frame before JS seek
+  const src =
+    videoUrl.includes('#') || videoUrl.includes('?')
+      ? videoUrl
+      : `${videoUrl}#t=0.1`;
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      className={className}
+      muted
+      playsInline
+      preload="auto"
+      // Never autoplay in the grid
+    />
+  );
+}
+
+async function fetchWithRetry(url, { attempts = 3, signal } = {}) {
+  let lastErr = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, { credentials: 'include', signal });
+      // Retry transient server/gateway errors
+      if (res.status >= 500 || res.status === 429 || res.status === 408) {
+        lastErr = new Error(`HTTP ${res.status}`);
+        if (i < attempts - 1) {
+          await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+          continue;
+        }
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (signal?.aborted) throw err;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+        continue;
+      }
+    }
+  }
+  throw lastErr || new Error('Request failed');
+}
+
+/**
  * Public profile — TikTok-style for any user (handle or id).
  * Own profile → Edit Profile; others → Follow + Message (opens DM).
  */
@@ -49,6 +140,7 @@ export default function PublicProfilePage() {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [selectedTab, setSelectedTab] = useState('videos');
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
@@ -56,20 +148,33 @@ export default function PublicProfilePage() {
   const [resolvedUserId, setResolvedUserId] = useState(null);
   const [deletingVideoId, setDeletingVideoId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
+  const [pathKey, setPathKey] = useState(null);
 
-  const fetchAll = useCallback(async (pathKey) => {
+  const fetchAll = useCallback(async (key) => {
+    if (!key) return;
     try {
       setLoading(true);
       setNotFound(false);
+      setLoadError(null);
 
-      const res = await fetch(`/api/sellers/${encodeURIComponent(pathKey)}`);
-      if (!res.ok) {
+      const res = await fetchWithRetry(`/api/sellers/${encodeURIComponent(key)}`, {
+        attempts: 3,
+      });
+
+      if (res.status === 404) {
         setNotFound(true);
+        setProfile(null);
         return;
       }
+      if (!res.ok) {
+        setLoadError('Could not load this profile. Please try again.');
+        return;
+      }
+
       const data = await res.json();
       if (!data.profile) {
         setNotFound(true);
+        setProfile(null);
         return;
       }
 
@@ -87,16 +192,21 @@ export default function PublicProfilePage() {
 
       if (uid) {
         try {
-          const vidsRes = await fetch(`/api/videos/user/${encodeURIComponent(uid)}`);
+          const vidsRes = await fetchWithRetry(
+            `/api/videos/user/${encodeURIComponent(uid)}`,
+            { attempts: 2 },
+          );
           if (vidsRes.ok) {
             const vidsData = await vidsRes.json();
             setVideos(vidsData.videos || []);
           }
-        } catch (e) {}
+        } catch (e) {
+          /* videos are secondary — profile still shows */
+        }
       }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
-      setNotFound(true);
+      setLoadError('Could not load this profile. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -106,6 +216,7 @@ export default function PublicProfilePage() {
     const pathParts = window.location.pathname.split('/').filter(Boolean);
     const key =
       pathParts[0] === 'seller' ? pathParts[1] : pathParts[pathParts.length - 1];
+    setPathKey(key || null);
     if (key) fetchAll(key);
   }, [fetchAll]);
 
@@ -193,7 +304,6 @@ export default function PublicProfilePage() {
   const openMessage = () => {
     if (!resolvedUserId) return;
     if (!user) {
-      const handle = profile?.username || resolvedUserId;
       window.location.href = `/account/signin?callbackUrl=/inbox?userId=${encodeURIComponent(resolvedUserId)}`;
       return;
     }
@@ -218,7 +328,7 @@ export default function PublicProfilePage() {
     );
   }
 
-  if (notFound || !profile) {
+  if (notFound) {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-4">
         <UserIcon size={56} className="text-white/20" />
@@ -230,6 +340,33 @@ export default function PublicProfilePage() {
         >
           Go Back
         </button>
+      </div>
+    );
+  }
+
+  if (loadError || !profile) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-4 px-6">
+        <UserIcon size={56} className="text-white/20" />
+        <p className="text-white/60 text-lg text-center">
+          {loadError || 'Could not load this profile.'}
+        </p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => pathKey && fetchAll(pathKey)}
+            className="px-6 py-3 bg-[#D4AF37] text-black rounded-xl font-bold hover:opacity-90"
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            onClick={goBackFromProfile}
+            className="px-6 py-3 bg-white/10 text-white rounded-xl font-semibold hover:bg-white/20"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
@@ -277,6 +414,7 @@ export default function PublicProfilePage() {
         <div className="flex flex-col items-center pt-6">
           <div className="w-24 h-24 rounded-full overflow-hidden bg-white/10 border border-white/15 flex items-center justify-center mb-3">
             {profile.profile_image ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={profile.profile_image}
                 alt={displayName}
@@ -390,28 +528,18 @@ export default function PublicProfilePage() {
                     className="relative aspect-[3/4] bg-white/5 overflow-hidden group"
                   >
                     <a href={`/video/${video.id}`} className="block w-full h-full">
-                      {video.thumbnail_url ? (
-                        <img
-                          src={video.thumbnail_url}
-                          alt=""
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <video
-                          src={video.video_url}
-                          className="w-full h-full object-cover"
-                          muted
-                          playsInline
-                          preload="metadata"
-                        />
-                      )}
+                      <VideoThumb
+                        thumbnailUrl={video.thumbnail_url || video.thumbnailUrl}
+                        videoUrl={video.video_url || video.videoUrl}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
                       <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
                         <Play size={12} className="text-white" fill="white" />
                         <span className="text-white text-xs font-semibold">
-                          {video.views_count ?? 0}
+                          {video.views_count ?? video.viewsCount ?? 0}
                         </span>
                       </div>
-                      {video.tagged_items?.length > 0 && (
+                      {(video.tagged_items?.length > 0 || video.taggedItems?.length > 0) && (
                         <div className="absolute top-1.5 left-1.5 w-5 h-5 bg-[#D4AF37] rounded-full flex items-center justify-center">
                           <ShoppingBag size={11} className="text-black" />
                         </div>
@@ -472,6 +600,7 @@ export default function PublicProfilePage() {
                       className="relative aspect-[3/4] bg-white/5 overflow-hidden group"
                     >
                       {image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={typeof image === 'string' ? image : image?.url}
                           alt={item.title}
