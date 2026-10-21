@@ -1,15 +1,14 @@
 // @ts-nocheck
 import sql from '@/app/api/utils/sql';
-import { auth } from '@/app/api/utils/auth';
+import { resolveUserId } from '@/app/api/utils/auth';
 
 /**
  * Studio Insights — not a "creator-only" silo.
  * Any signed-in user sees performance for their videos + product tags.
  */
-export async function GET() {
+export async function GET(request) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
+    const userId = await resolveUserId(request);
     if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
