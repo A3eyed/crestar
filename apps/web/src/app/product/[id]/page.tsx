@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import useUser from '@/utils/useUser';
 import CurrencyPrice from '@/components/CurrencyPrice';
+import { fetchWithRetry } from '@/utils/fetchWithRetry';
 import {
   ArrowLeft,
   ShoppingCart,
@@ -56,6 +57,8 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState(null);
   const [variants, setVariants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [productId, setProductId] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
@@ -64,17 +67,29 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     const id = window.location.pathname.split('/').filter(Boolean).pop();
+    setProductId(id || null);
     if (id) fetchProduct(id);
   }, []);
 
   const fetchProduct = async (id) => {
     try {
-      const res = await fetch('/api/products/' + id);
-      if (!res.ok) {
+      setLoadError(null);
+      if (!product) setLoading(true);
+      const res = await fetchWithRetry('/api/products/' + id, { attempts: 3 });
+      if (res.status === 404) {
         setProduct(null);
+        setLoadError(null);
+        return;
+      }
+      if (!res.ok) {
+        setLoadError('Could not load this product. Please try again.');
         return;
       }
       const data = await res.json();
+      if (!data.product) {
+        setProduct(null);
+        return;
+      }
       setProduct(data.product);
       const productVariants = data.variants || [];
       setVariants(productVariants);
@@ -88,7 +103,7 @@ export default function ProductDetailPage() {
       }
     } catch (err) {
       console.error(err);
-      setProduct(null);
+      setLoadError('Could not load this product. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -127,8 +142,7 @@ export default function ProductDetailPage() {
       raw = sizeOrPackVariants.map((v) => ({
         label: v.variant_value,
         stock: v.stock_quantity != null ? Number(v.stock_quantity) : null,
-        sold_out:
-          v.stock_quantity != null ? Number(v.stock_quantity) <= 0 : false,
+        sold_out: v.stock_quantity != null ? Number(v.stock_quantity) <= 0 : false,
       }));
     }
     return raw.map(sizeStock).filter((s) => s.label);
@@ -138,11 +152,7 @@ export default function ProductDetailPage() {
     if (!variant) return [];
     let imgs = variant.variant_images;
     if (typeof imgs === 'string') {
-      try {
-        imgs = JSON.parse(imgs);
-      } catch {
-        imgs = [];
-      }
+      try { imgs = JSON.parse(imgs); } catch { imgs = []; }
     }
     if (Array.isArray(imgs) && imgs.length) return imgs;
     if (variant.variant_image) return [variant.variant_image];
@@ -166,29 +176,16 @@ export default function ProductDetailPage() {
     if (available && !selectedSize) setSelectedSize(available.label);
   }, [sizeOptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const stockQty =
-    product?.stockQuantity ??
-    product?.stock_quantity ??
-    product?.stock ??
-    null;
-  const soldCount =
-    product?.soldCount ?? product?.sold_count ?? product?.units_sold ?? 0;
+  const stockQty = product?.stockQuantity ?? product?.stock_quantity ?? product?.stock ?? null;
+  const soldCount = product?.soldCount ?? product?.sold_count ?? product?.units_sold ?? 0;
   const rating = product?.rating ?? product?.avg_rating ?? null;
   const reviewCount = product?.reviewCount ?? product?.review_count ?? 0;
-
   const selectedSizeMeta = sizeOptions.find((s) => s.label === selectedSize);
   const sizeBlocksBuy = selectedSizeMeta?.soldOut === true;
-  const outOfStock =
-    sizeBlocksBuy || (stockQty != null && Number(stockQty) <= 0);
-
-  // Cap quantity by available stock (size-level or product-level)
+  const outOfStock = sizeBlocksBuy || (stockQty != null && Number(stockQty) <= 0);
   const maxQty = (() => {
-    if (selectedSizeMeta?.stock != null && selectedSizeMeta.stock >= 0) {
-      return Math.max(0, Number(selectedSizeMeta.stock));
-    }
-    if (stockQty != null && Number(stockQty) >= 0) {
-      return Math.max(0, Number(stockQty));
-    }
+    if (selectedSizeMeta?.stock != null && selectedSizeMeta.stock >= 0) return Math.max(0, Number(selectedSizeMeta.stock));
+    if (stockQty != null && Number(stockQty) >= 0) return Math.max(0, Number(stockQty));
     return 99;
   })();
 
@@ -201,18 +198,9 @@ export default function ProductDetailPage() {
       window.location.href = '/account/signin?callbackUrl=' + encodeURIComponent(window.location.pathname);
       return;
     }
-    if (sizeOptions.length && !selectedSize) {
-      alert('Choose a size or pack');
-      return;
-    }
-    if (outOfStock || maxQty <= 0) {
-      alert('This option is sold out');
-      return;
-    }
-    if (quantity > maxQty) {
-      alert('Only ' + maxQty + ' available in stock');
-      return;
-    }
+    if (sizeOptions.length && !selectedSize) { alert('Choose a size or pack'); return; }
+    if (outOfStock || maxQty <= 0) { alert('This option is sold out'); return; }
+    if (quantity > maxQty) { alert('Only ' + maxQty + ' available in stock'); return; }
 
     const item = {
       id: product.id,
@@ -226,9 +214,7 @@ export default function ProductDetailPage() {
       sellerId: product.seller_id || product.seller?.id,
       seller: product.seller?.businessName || product.seller?.displayName,
       seller_currency: product.seller_currency || 'GHS',
-      cartKey: [product.id, selectedColor && 'c:' + selectedColor, selectedSize && 's:' + selectedSize]
-        .filter(Boolean)
-        .join('_'),
+      cartKey: [product.id, selectedColor && 'c:' + selectedColor, selectedSize && 's:' + selectedSize].filter(Boolean).join('_'),
     };
 
     if (goTo === 'buynow') {
@@ -243,10 +229,7 @@ export default function ProductDetailPage() {
       if (idx >= 0) {
         const existingQty = cart[idx].quantity || 1;
         const nextQty = Math.min(existingQty + quantity, maxQty);
-        if (nextQty <= existingQty && existingQty >= maxQty) {
-          alert('Only ' + maxQty + ' available in stock');
-          return;
-        }
+        if (nextQty <= existingQty && existingQty >= maxQty) { alert('Only ' + maxQty + ' available in stock'); return; }
         cart[idx].quantity = nextQty;
         cart[idx].maxStock = maxQty;
       } else {
@@ -277,14 +260,13 @@ export default function ProductDetailPage() {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4 px-6">
         <Package size={40} className="text-white/30" />
-        <p className="text-white text-lg font-semibold">Product not found</p>
-        <button
-          type="button"
-          onClick={() => window.history.back()}
-          className="glass-chip text-white px-5 py-2.5 rounded-full text-sm"
-        >
-          Go back
-        </button>
+        <p className="text-white text-lg font-semibold">{loadError || 'Product not found'}</p>
+        <div className="flex gap-3">
+          {loadError && productId && (
+            <button type="button" onClick={() => fetchProduct(productId)} className="bg-[#D4AF37] text-black px-5 py-2.5 rounded-full text-sm font-bold">Try again</button>
+          )}
+          <button type="button" onClick={() => window.history.back()} className="glass-chip text-white px-5 py-2.5 rounded-full text-sm">Go back</button>
+        </div>
       </div>
     );
   }
@@ -293,58 +275,22 @@ export default function ProductDetailPage() {
     <div className="min-h-screen bg-black text-white pb-28">
       <div className="relative aspect-[3/4] bg-black max-h-[70vh]">
         {images.length > 0 ? (
-          <img
-            src={typeof images[selectedImage] === 'string' ? images[selectedImage] : images[selectedImage]?.url}
-            alt={product.title}
-            className="w-full h-full object-cover"
-          />
+          <img src={typeof images[selectedImage] === 'string' ? images[selectedImage] : images[selectedImage]?.url} alt={product.title} className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-white/5">
-            <Package size={48} className="text-white/20" />
-          </div>
+          <div className="w-full h-full flex items-center justify-center bg-white/5"><Package size={48} className="text-white/20" /></div>
         )}
-
-        <button
-          type="button"
-          onClick={() => window.history.back()}
-          className="absolute top-4 left-4 w-10 h-10 rounded-full glass flex items-center justify-center"
-        >
-          <ArrowLeft size={20} />
-        </button>
+        <button type="button" onClick={() => window.history.back()} className="absolute top-4 left-4 w-10 h-10 rounded-full glass flex items-center justify-center"><ArrowLeft size={20} /></button>
         <div className="absolute top-4 right-4 flex gap-2">
-          <button type="button" className="w-10 h-10 rounded-full glass flex items-center justify-center">
-            <Share2 size={18} />
-          </button>
-          <button type="button" className="w-10 h-10 rounded-full glass flex items-center justify-center">
-            <Heart size={18} />
-          </button>
+          <button type="button" className="w-10 h-10 rounded-full glass flex items-center justify-center"><Share2 size={18} /></button>
+          <button type="button" className="w-10 h-10 rounded-full glass flex items-center justify-center"><Heart size={18} /></button>
         </div>
-
         {images.length > 1 && (
           <>
-            <button
-              type="button"
-              onClick={() => setSelectedImage((i) => (i - 1 + images.length) % images.length)}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full glass flex items-center justify-center"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedImage((i) => (i + 1) % images.length)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full glass flex items-center justify-center"
-            >
-              <ChevronRight size={18} />
-            </button>
+            <button type="button" onClick={() => setSelectedImage((i) => (i - 1 + images.length) % images.length)} className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full glass flex items-center justify-center"><ChevronLeft size={18} /></button>
+            <button type="button" onClick={() => setSelectedImage((i) => (i + 1) % images.length)} className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full glass flex items-center justify-center"><ChevronRight size={18} /></button>
             <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
               {images.map((_, i) => (
-                <span
-                  key={i}
-                  className={
-                    'h-1.5 rounded-full transition-all ' +
-                    (i === selectedImage ? 'w-4 bg-[#D4AF37]' : 'w-1.5 bg-white/40')
-                  }
-                />
+                <span key={i} className={'h-1.5 rounded-full transition-all ' + (i === selectedImage ? 'w-4 bg-[#D4AF37]' : 'w-1.5 bg-white/40')} />
               ))}
             </div>
           </>
@@ -357,11 +303,7 @@ export default function ProductDetailPage() {
             <h1 className="text-xl font-bold leading-snug">{product.title}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/55">
               {soldCount > 0 && <span>{soldCount} sold</span>}
-              {stockQty != null && (
-                <span className={Number(stockQty) <= 0 ? 'text-red-400' : ''}>
-                  {Number(stockQty) <= 0 ? 'Sold out' : stockQty + ' in stock'}
-                </span>
-              )}
+              {stockQty != null && <span className={Number(stockQty) <= 0 ? 'text-red-400' : ''}>{Number(stockQty) <= 0 ? 'Sold out' : stockQty + ' in stock'}</span>}
               {(rating != null || reviewCount > 0) && (
                 <span className="inline-flex items-center gap-1">
                   <Star size={13} className="text-[#D4AF37]" fill="#D4AF37" />
@@ -372,39 +314,19 @@ export default function ProductDetailPage() {
             </div>
           </div>
           <div className="text-right shrink-0">
-            <CurrencyPrice
-              price={getCurrentPrice()}
-              originalCurrency={product.seller_currency || 'GHS'}
-              showOriginal={false}
-              size="large"
-              textStyle={{ color: '#D4AF37', fontSize: '1.35rem', fontWeight: 700 }}
-            />
+            <CurrencyPrice price={getCurrentPrice()} originalCurrency={product.seller_currency || 'GHS'} showOriginal={false} size="large" textStyle={{ color: '#D4AF37', fontSize: '1.35rem', fontWeight: 700 }} />
           </div>
         </div>
 
         {product.seller && (
-          <a
-            href={product.seller.username ? '/@' + product.seller.username : '#'}
-            className="flex items-center gap-3 glass rounded-2xl p-3"
-          >
+          <a href={product.seller.username ? '/' + product.seller.username : '#'} className="flex items-center gap-3 glass rounded-2xl p-3">
             <div className="w-10 h-10 rounded-full bg-white/10 overflow-hidden">
-              {product.seller.profileImage ? (
-                <img src={product.seller.profileImage} alt="" className="w-full h-full object-cover" />
-              ) : null}
+              {product.seller.profileImage ? <img src={product.seller.profileImage} alt="" className="w-full h-full object-cover" /> : null}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold truncate">
-                {product.seller.businessName || product.seller.displayName}
-              </p>
-              {product.seller.username && (
-                <p className="text-white/45 text-xs">@{product.seller.username}</p>
-              )}
+              <p className="font-semibold truncate">{product.seller.businessName || product.seller.displayName}</p>
+              {product.seller.username && <p className="text-white/45 text-xs">@{product.seller.username}</p>}
             </div>
-            {product.seller.isVerified && (
-              <span className="text-[10px] uppercase tracking-wide text-[#D4AF37] font-bold">
-                Verified
-              </span>
-            )}
           </a>
         )}
 
@@ -415,15 +337,7 @@ export default function ProductDetailPage() {
               {colorVariants.map((v) => {
                 const active = selectedColor === v.variant_value;
                 return (
-                  <button
-                    key={v.id || v.variant_value}
-                    type="button"
-                    onClick={() => setSelectedColor(v.variant_value)}
-                    className={
-                      'px-3.5 py-2 rounded-full text-sm font-medium transition ' +
-                      (active ? 'glass-chip-active' : 'glass-chip text-white/80')
-                    }
-                  >
+                  <button key={v.id || v.variant_value} type="button" onClick={() => setSelectedColor(v.variant_value)} className={'px-3.5 py-2 rounded-full text-sm font-medium transition ' + (active ? 'glass-chip-active' : 'glass-chip text-white/80')}>
                     {v.variant_value}
                   </button>
                 );
@@ -434,31 +348,14 @@ export default function ProductDetailPage() {
 
         {sizeOptions.length > 0 && (
           <div>
-            <p className="text-sm text-white/60 mb-2">
-              {sizeOrPackVariants.some((v) => v.variant_type === 'pack') ? 'Pack / quantity' : 'Size'}
-            </p>
+            <p className="text-sm text-white/60 mb-2">{sizeOrPackVariants.some((v) => v.variant_type === 'pack') ? 'Pack / quantity' : 'Size'}</p>
             <div className="flex flex-wrap gap-2">
               {sizeOptions.map((s) => {
                 const active = selectedSize === s.label;
                 return (
-                  <button
-                    key={s.label}
-                    type="button"
-                    disabled={s.soldOut}
-                    onClick={() => !s.soldOut && setSelectedSize(s.label)}
-                    className={
-                      'relative px-3.5 py-2 rounded-full text-sm font-medium transition ' +
-                      (s.soldOut
-                        ? 'bg-white/5 text-white/30 border border-white/10 line-through'
-                        : active
-                          ? 'glass-chip-active'
-                          : 'glass-chip text-white/80')
-                    }
-                  >
+                  <button key={s.label} type="button" disabled={s.soldOut} onClick={() => !s.soldOut && setSelectedSize(s.label)} className={'relative px-3.5 py-2 rounded-full text-sm font-medium transition ' + (s.soldOut ? 'bg-white/5 text-white/30 border border-white/10 line-through' : active ? 'glass-chip-active' : 'glass-chip text-white/80')}>
                     {s.label}
-                    {s.soldOut && (
-                      <span className="block text-[10px] no-underline font-normal">Sold out</span>
-                    )}
+                    {s.soldOut && <span className="block text-[10px] no-underline font-normal">Sold out</span>}
                   </button>
                 );
               })}
@@ -469,78 +366,30 @@ export default function ProductDetailPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-white/60">Quantity</p>
-            {maxQty < 99 && (
-              <p className="text-xs text-white/40">{maxQty} available</p>
-            )}
+            {maxQty < 99 && <p className="text-xs text-white/40">{maxQty} available</p>}
           </div>
           <div className="flex items-center gap-3 glass rounded-full px-2 py-1">
-            <button
-              type="button"
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="w-8 h-8 rounded-full flex items-center justify-center"
-            >
-              <Minus size={16} />
-            </button>
+            <button type="button" onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="w-8 h-8 rounded-full flex items-center justify-center"><Minus size={16} /></button>
             <span className="w-6 text-center font-semibold">{quantity}</span>
-            <button
-              type="button"
-              onClick={() => setQuantity((q) => Math.min(maxQty || 1, q + 1))}
-              disabled={quantity >= maxQty}
-              className="w-8 h-8 rounded-full flex items-center justify-center disabled:opacity-30"
-            >
-              <Plus size={16} />
-            </button>
+            <button type="button" onClick={() => setQuantity((q) => Math.min(maxQty || 1, q + 1))} disabled={quantity >= maxQty} className="w-8 h-8 rounded-full flex items-center justify-center disabled:opacity-30"><Plus size={16} /></button>
           </div>
         </div>
 
         {product.description && (
           <div>
             <p className="text-sm font-semibold mb-1.5">Description</p>
-            <p className="text-white/65 text-sm leading-relaxed whitespace-pre-wrap">
-              {product.description}
-            </p>
+            <p className="text-white/65 text-sm leading-relaxed whitespace-pre-wrap">{product.description}</p>
           </div>
         )}
-
-        <div className="glass rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="font-semibold">Reviews</p>
-            {reviewCount > 0 && (
-              <span className="text-white/45 text-sm">{reviewCount} reviews</span>
-            )}
-          </div>
-          {reviewCount > 0 || rating != null ? (
-            <div className="flex items-center gap-2 text-[#D4AF37]">
-              <Star size={16} fill="#D4AF37" />
-              <span className="font-semibold text-white">
-                {rating != null ? Number(rating).toFixed(1) : '—'}
-              </span>
-              <span className="text-white/45 text-sm">average</span>
-            </div>
-          ) : (
-            <p className="text-white/45 text-sm">No reviews yet — be the first after your order.</p>
-          )}
-        </div>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 glass-bar px-4 py-3 z-50">
         <div className="max-w-xl mx-auto flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => pushCartItem('cart')}
-            disabled={outOfStock || maxQty <= 0}
-            className="flex-1 h-12 rounded-full glass-chip text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
-          >
-            <ShoppingCart size={18} />
+          <button type="button" onClick={() => pushCartItem('cart')} disabled={outOfStock} className="flex-1 glass-chip py-3 rounded-full font-semibold disabled:opacity-40">
             {addedFlash ? 'Added' : 'Add to cart'}
           </button>
-          <button
-            type="button"
-            onClick={() => pushCartItem('buynow')}
-            disabled={outOfStock || maxQty <= 0}
-            className="flex-[1.2] h-12 rounded-full bg-[#D4AF37] text-black font-bold disabled:opacity-40"
-          >
-            {outOfStock || maxQty <= 0 ? 'Sold out' : 'Buy now'}
+          <button type="button" onClick={() => pushCartItem('buynow')} disabled={outOfStock} className="flex-1 bg-[#D4AF37] text-black py-3 rounded-full font-bold disabled:opacity-40">
+            Buy now
           </button>
         </div>
       </div>
