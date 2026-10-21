@@ -1,6 +1,6 @@
 // @ts-nocheck
 import sql from '@/app/api/utils/sql';
-import { auth } from '@/app/api/utils/auth';
+import { resolveUserId } from '@/app/api/utils/auth';
 
 /**
  * GET /api/videos/:id
@@ -66,8 +66,7 @@ export async function GET(request, { params }) {
  */
 export async function PATCH(request, { params }) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
+    const userId = await resolveUserId(request);
     if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -79,7 +78,12 @@ export async function PATCH(request, { params }) {
 
     const body = await request.json().catch(() => ({}));
     const caption = typeof body.caption === 'string' ? body.caption.slice(0, 500) : null;
-    const visibility = body.visibility === 'private' ? 'private' : body.visibility === 'public' ? 'public' : null;
+    const visibility =
+      body.visibility === 'private'
+        ? 'private'
+        : body.visibility === 'public'
+          ? 'public'
+          : null;
 
     const [existing] = await sql`
       SELECT id, creator_user_id, status FROM videos WHERE id = ${id} LIMIT 1
