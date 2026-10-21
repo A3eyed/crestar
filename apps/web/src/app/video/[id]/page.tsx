@@ -14,11 +14,11 @@ import {
   BadgeCheck,
   ChevronUp,
   ChevronDown,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 function closeViewer(video) {
-  // Prefer popping history so: Profile → Video → Close returns to Profile
-  // (never push /seller/… which stacks a second profile and traps Back).
   try {
     const ref = typeof document !== 'undefined' ? document.referrer : '';
     let sameOrigin = false;
@@ -30,11 +30,7 @@ function closeViewer(video) {
       window.history.back();
       return;
     }
-  } catch {
-    /* fall through */
-  }
-
-  // Deep-link / no history: land on creator profile (handle preferred)
+  } catch {}
   if (video?.username) {
     window.location.assign(`/${encodeURIComponent(video.username)}`);
     return;
@@ -56,6 +52,7 @@ export default function VideoViewerPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [muted, setMuted] = useState(true);
 
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
@@ -77,6 +74,7 @@ export default function VideoViewerPage() {
       setVideo(data.video);
       setLikeCount(data.video.likes_count || 0);
       setCommentCount(data.video.comments_count || 0);
+      setIsPlaying(true);
 
       const creatorId = data.video.creator_user_id;
       if (creatorId) {
@@ -103,7 +101,23 @@ export default function VideoViewerPage() {
     if (id) fetchVideo(id);
   }, [fetchVideo]);
 
-  // Swipe between creator videos without growing the history stack
+  // Force autoplay when video element mounts / source changes (mobile needs muted)
+  useEffect(() => {
+    if (!video?.video_url || loading) return;
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = muted;
+    const p = el.play();
+    if (p && typeof p.catch === 'function') {
+      p.then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    }
+  }, [video?.video_url, loading]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el) el.muted = muted;
+  }, [muted]);
+
   const goToVideo = (direction) => {
     const nextIndex = currentIndex + direction;
     if (nextIndex < 0 || nextIndex >= creatorVideos.length) return;
@@ -115,11 +129,11 @@ export default function VideoViewerPage() {
     setIsPlaying(true);
   };
 
-  const togglePlay = () => {
+  const togglePlay = (e) => {
+    e?.stopPropagation?.();
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
-      videoRef.current.play().catch(() => {});
-      setIsPlaying(true);
+      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -247,7 +261,6 @@ export default function VideoViewerPage() {
     tagImage = Array.isArray(m) ? m[0] : null;
   }
   const tagId = firstTag ? firstTag.product_id || firstTag.service_id : null;
-
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < creatorVideos.length - 1;
 
@@ -260,24 +273,29 @@ export default function VideoViewerPage() {
           poster={video.thumbnail_url || undefined}
           autoPlay
           loop
+          muted={muted}
           playsInline
           className="w-full h-full object-contain"
           onClick={togglePlay}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+        />
+
+        <button
+          type="button"
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+          onClick={togglePlay}
+          className="absolute inset-0 z-[1]"
         />
 
         {!isPlaying && (
-          <button
-            type="button"
-            onClick={togglePlay}
-            className="absolute inset-0 flex items-center justify-center"
-          >
+          <div className="absolute inset-0 z-[2] flex items-center justify-center pointer-events-none">
             <span className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center">
-              <Play size={32} className="text-white" fill="white" />
+              <Play size={32} className="text-white ml-1" fill="white" />
             </span>
-          </button>
+          </div>
         )}
 
-        {/* Close — history.back so we leave the viewer, not push another profile */}
         <button
           type="button"
           onClick={() => closeViewer(video)}
@@ -287,7 +305,18 @@ export default function VideoViewerPage() {
           <X size={20} className="text-white" />
         </button>
 
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMuted((m) => !m);
+          }}
+          className="absolute top-4 right-4 z-10 w-10 h-10 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80"
+        >
+          {muted ? <VolumeX size={18} className="text-white" /> : <Volume2 size={18} className="text-white" />}
+        </button>
+
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-10">
           <button
             type="button"
             onClick={() => goToVideo(-1)}
@@ -306,7 +335,7 @@ export default function VideoViewerPage() {
           </button>
         </div>
 
-        <div className="absolute right-3 bottom-28 flex flex-col items-center gap-5">
+        <div className="absolute right-3 bottom-28 flex flex-col items-center gap-5 z-10">
           <button type="button" onClick={handleLike} className="flex flex-col items-center gap-1">
             <span className="w-12 h-12 bg-white/15 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/25">
               <Heart
@@ -330,10 +359,10 @@ export default function VideoViewerPage() {
           </button>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-16 p-4 pb-6 bg-gradient-to-t from-black/70 to-transparent">
+        <div className="absolute bottom-0 left-0 right-16 p-4 pb-6 bg-gradient-to-t from-black/70 to-transparent z-10 pointer-events-none">
           <a
             href={video.username ? `/${video.username}` : `/seller/${video.creator_user_id}`}
-            className="flex items-center gap-2 mb-2"
+            className="flex items-center gap-2 mb-2 pointer-events-auto"
           >
             <span className="text-white font-bold">{displayName}</span>
             {video.is_verified && <BadgeCheck size={16} className="text-[#D4AF37]" />}
@@ -345,7 +374,7 @@ export default function VideoViewerPage() {
           {firstTag && tagId && (
             <a
               href={`/product/${tagId}`}
-              className="inline-flex items-center gap-2.5 bg-black/80 border border-[#D4AF37]/60 rounded-xl px-3.5 py-2.5 hover:bg-black"
+              className="inline-flex items-center gap-2.5 bg-black/80 border border-[#D4AF37]/60 rounded-xl px-3.5 py-2.5 hover:bg-black pointer-events-auto"
             >
               {tagImage ? (
                 <img src={tagImage} alt="" className="w-9 h-9 rounded-lg object-cover" />
@@ -377,7 +406,7 @@ export default function VideoViewerPage() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60">
           <div className="bg-[#141414] border border-white/10 w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-white/10">
-              <h3 className="font-bold">Comments ({commentCount})</h3>
+              <h3 className="font-bold text-white">Comments ({commentCount})</h3>
               <button
                 type="button"
                 onClick={() => setShowComments(false)}
