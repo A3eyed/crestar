@@ -16,6 +16,7 @@ import {
   Send,
   UserPlus,
   Check,
+  Play,
 } from 'lucide-react';
 import useUser from '@/utils/useUser';
 import useLocalization from '@/utils/useLocalization';
@@ -212,20 +213,43 @@ function FeedItem({
   const [following, setFollowing] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
+  const [pausedByUser, setPausedByUser] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const tagged = resolveTaggedProduct(item);
+
+  useEffect(() => {
+    if (index !== activeIndex) setPausedByUser(false);
+  }, [index, activeIndex]);
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
-    if (index === activeIndex) {
-      el.play?.().catch(() => {});
+    if (index === activeIndex && !pausedByUser) {
+      const p = el.play?.();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
     } else {
       el.pause?.();
-      try {
-        el.currentTime = 0;
-      } catch {}
+      if (index !== activeIndex) {
+        try {
+          el.currentTime = 0;
+        } catch {}
+      }
     }
-  }, [index, activeIndex]);
+  }, [index, activeIndex, pausedByUser, videoUrl]);
+
+  const togglePlay = (e) => {
+    e?.stopPropagation?.();
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.paused) {
+      setPausedByUser(false);
+      const p = el.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } else {
+      el.pause();
+      setPausedByUser(true);
+    }
+  };
 
   useEffect(() => {
     if (!user || !videoId) return;
@@ -281,10 +305,6 @@ function FeedItem({
 
   const toggleFollow = async () => {
     if (!user || !creatorId || followBusy) return;
-    if (!user) {
-      window.location.href = '/account/signin?callbackUrl=/';
-      return;
-    }
     setFollowBusy(true);
     try {
       const res = await fetch('/api/follows', {
@@ -323,13 +343,30 @@ function FeedItem({
       <video
         ref={videoRef}
         src={videoUrl}
+        poster={item.thumbnail || item.thumbnail_url || undefined}
         className="absolute inset-0 w-full h-full object-cover"
         playsInline
         loop
         muted={muted}
-        onClick={toggleMute}
+        autoPlay={index === activeIndex}
+        onClick={togglePlay}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none" />
+      <button
+        type="button"
+        aria-label={isPlaying ? 'Pause' : 'Play'}
+        onClick={togglePlay}
+        className="absolute inset-0 z-[1]"
+      />
+      {!isPlaying && index === activeIndex && (
+        <div className="absolute inset-0 z-[2] flex items-center justify-center pointer-events-none">
+          <span className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
+            <Play size={32} className="text-white ml-1" fill="white" />
+          </span>
+        </div>
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none z-[3]" />
 
       <div className="absolute right-3 bottom-28 flex flex-col items-center gap-5 z-10">
         <a href={'/' + username} className="relative mb-1">
@@ -420,7 +457,10 @@ function FeedItem({
 
       <button
         type="button"
-        onClick={toggleMute}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleMute();
+        }}
         className="absolute top-14 right-4 z-10 w-9 h-9 rounded-full bg-black/40 flex items-center justify-center text-white"
       >
         {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
