@@ -11,6 +11,8 @@ const ALLOWED = new Set([
   'image/png',
   'image/webp',
   'image/gif',
+  'image/heic',
+  'image/heif',
   'application/octet-stream',
 ]);
 
@@ -22,6 +24,8 @@ function extFor(mime) {
   if (t.includes('png')) return 'png';
   if (t.includes('webp')) return 'webp';
   if (t.includes('gif')) return 'gif';
+  if (t.includes('heic')) return 'heic';
+  if (t.includes('heif')) return 'heif';
   if (t.includes('jpeg') || t.includes('jpg')) return 'jpg';
   return 'bin';
 }
@@ -41,12 +45,21 @@ export async function POST(request) {
     const body = await request.json().catch(() => ({}));
     let contentType = String(body.contentType || 'application/octet-stream').toLowerCase();
     if (!ALLOWED.has(contentType)) {
-      // Keep a sensible default for camera webm/mp4
-      if (contentType.startsWith('video/')) contentType = contentType;
-      else contentType = 'application/octet-stream';
+      if (contentType.startsWith('video/')) {
+        // keep video/* as-is
+      } else if (contentType.startsWith('image/')) {
+        // keep unknown image types (some browsers report odd MIME)
+      } else {
+        contentType = 'application/octet-stream';
+      }
     }
 
-    const folder = body.folder === 'videos' ? 'videos' : 'uploads';
+    let folder = 'uploads';
+    if (body.folder === 'videos') folder = 'videos';
+    else if (body.folder === 'avatars') folder = 'avatars';
+    else if (contentType.startsWith('video/')) folder = 'videos';
+    else if (contentType.startsWith('image/')) folder = 'avatars';
+
     const key = newObjectKey(folder, extFor(contentType));
     const signed = createPresignedPut({ key, contentType, expiresIn: 900 });
 
