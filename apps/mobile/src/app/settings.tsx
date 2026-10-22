@@ -57,9 +57,13 @@ export default function SettingsScreen() {
     AVAILABLE_LANGUAGES.find((l) => l.code === language)?.nativeName ||
     "English";
 
+  /**
+   * Always leave the settings tree to profile.
+   * history.back() can re-enter account-privacy after a privacy → settings
+   * navigation and create a settings ↔ privacy loop.
+   */
   const handleBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.push("/(tabs)/profile");
+    router.replace("/(tabs)/profile");
   };
 
   const handleLogout = () => {
@@ -280,7 +284,7 @@ export default function SettingsScreen() {
           gap: 16,
         }}
       >
-        <TouchableOpacity onPress={handleBack}>
+        <TouchableOpacity onPress={handleBack} accessibilityRole="button">
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={{ color: colors.text, fontSize: 20, fontWeight: "700" }}>
