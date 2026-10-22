@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
 function Toggle({ value, onChange }) {
   return (
     <button
+      type="button"
       onClick={() => onChange(!value)}
       className="relative w-12 h-7 rounded-full transition-colors shrink-0"
       style={{ backgroundColor: value ? BRAND : 'rgba(255,255,255,0.15)' }}
@@ -76,6 +77,20 @@ export default function PrivacySettingsPage() {
     }
   };
 
+  /**
+   * Prefer popping the stack (Settings → Privacy).
+   * Fallback: replace so we do not push another /settings entry (that caused a loop
+   * with settings using history.back()).
+   */
+  const handleBack = () => {
+    if (typeof window === 'undefined') return;
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.replace('/settings');
+  };
+
   const rows = [
     {
       key: 'privateAccount',
@@ -111,7 +126,8 @@ export default function PrivacySettingsPage() {
       key: 'shareLocationWithSellers',
       icon: MapPin,
       title: 'Share Delivery Location',
-      description: 'Share your delivery address with sellers and deliverers on active orders',
+      description:
+        'Share your delivery address with sellers and deliverers on active orders',
     },
   ];
 
@@ -121,15 +137,16 @@ export default function PrivacySettingsPage() {
 
   return (
     <div className="min-h-screen bg-black text-white pb-24">
-      {/* Header */}
       <div className="sticky top-0 z-20 bg-black border-b border-white/10 backdrop-blur-xl bg-opacity-95">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-4">
-          <a
-            href="/settings"
+          <button
+            type="button"
+            onClick={handleBack}
+            aria-label="Back to settings"
             className="w-10 h-10 bg-white/10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
           >
             <ArrowLeft size={20} className="text-white" />
-          </a>
+          </button>
           <h1 className="text-xl font-bold">Privacy Settings</h1>
           {saved && (
             <span className="ml-auto text-sm font-semibold" style={{ color: BRAND }}>
@@ -142,7 +159,7 @@ export default function PrivacySettingsPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-xl p-4 mb-6">
           <p className="text-white/90 text-sm leading-relaxed">
-            🔒 Control who can see your content and interact with you. These settings apply across
+            Control who can see your content and interact with you. These settings apply across
             your Crestar account.
           </p>
         </div>
@@ -154,7 +171,9 @@ export default function PrivacySettingsPage() {
             return (
               <div
                 key={row.key}
-                className={`flex items-center justify-between gap-4 p-4 ${isLast ? '' : 'border-b border-white/10'}`}
+                className={`flex items-center justify-between gap-4 p-4 ${
+                  isLast ? '' : 'border-b border-white/10'
+                }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <Icon size={20} className="text-white/60 shrink-0" />
@@ -169,7 +188,6 @@ export default function PrivacySettingsPage() {
           })}
         </div>
 
-        {/* Legal documents — kept separate from settings */}
         <h2 className="text-white/60 text-xs font-bold uppercase tracking-wider mb-3">Legal</h2>
         <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
           <a
