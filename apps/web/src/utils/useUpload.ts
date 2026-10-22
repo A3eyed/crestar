@@ -13,6 +13,8 @@ interface UploadInput {
 	url?: string;
 	base64?: string;
 	buffer?: Buffer;
+	/** R2 folder hint: avatars | videos | uploads */
+	folder?: string;
 }
 
 interface UploadResult {
@@ -26,16 +28,20 @@ interface UploadHookResult {
 }
 
 /** Prefer direct-to-R2 presign so Worker body limits and wrong MIME (.bin) are avoided. */
-async function uploadFileViaPresign(file: File): Promise<UploadResult> {
+async function uploadFileViaPresign(file: File, folderHint?: string): Promise<UploadResult> {
 	const contentType = file.type || 'application/octet-stream';
+	let folder = folderHint;
+	if (!folder) {
+		if (contentType.startsWith('video/')) folder = 'videos';
+		else if (contentType.startsWith('image/')) folder = 'avatars';
+		else folder = 'uploads';
+	}
+
 	const presignRes = await fetch('/api/upload/presign', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		credentials: 'include',
-		body: JSON.stringify({
-			contentType,
-			folder: contentType.startsWith('video/') ? 'videos' : 'uploads',
-		}),
+		body: JSON.stringify({ contentType, folder }),
 	});
 	if (!presignRes.ok) {
 		const err = await presignRes.json().catch(() => ({}));
@@ -71,7 +77,7 @@ function useUpload(): [(input: UploadInput) => Promise<UploadResult>, UploadHook
 			// Web File → presigned R2 PUT (correct extension + content-type)
 			if ('file' in input && input.file instanceof File) {
 				try {
-					return await uploadFileViaPresign(input.file);
+					return await uploadFileViaPresign(input.file, input.folder);
 				} catch (presignErr) {
 					// Fallback to server /api/upload
 					console.warn('[useUpload] presign failed, falling back:', presignErr);
@@ -93,7 +99,7 @@ function useUpload(): [(input: UploadInput) => Promise<UploadResult>, UploadHook
 			}
 
 			if ('reactNativeAsset' in input && input.reactNativeAsset?.file instanceof File) {
-				return await uploadFileViaPresign(input.reactNativeAsset.file);
+				return await uploadFileViaPresign(input.reactNativeAsset.file, input.folder);
 			}
 
 			let response: Response | undefined;
