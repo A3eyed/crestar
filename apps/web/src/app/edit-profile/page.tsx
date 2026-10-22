@@ -30,6 +30,7 @@ export default function EditProfilePage() {
   const [originalData, setOriginalData] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldSaving, setFieldSaving] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [statusMsg, setStatusMsg] = useState(null);
@@ -87,12 +88,10 @@ export default function EditProfilePage() {
     }
   };
 
-  const hasChanges =
-    originalData &&
-    (formData.displayName !== originalData.displayName ||
-      formData.username !== originalData.username ||
-      formData.bio !== originalData.bio ||
-      formData.profileImage !== originalData.profileImage);
+  const flashStatus = (msg) => {
+    setStatusMsg(msg);
+    setTimeout(() => setStatusMsg(null), 2200);
+  };
 
   const persistProfileImage = async (url) => {
     const response = await fetch("/api/profile/update", {
@@ -106,6 +105,56 @@ export default function EditProfilePage() {
       throw new Error(data.error || data.detail || "Could not save photo");
     }
     return data;
+  };
+
+  const persistNameAndBio = async ({ displayName, bio }) => {
+    const response = await fetch("/api/profile/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ displayName, bio }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || data.detail || "Could not save profile");
+    }
+    return data;
+  };
+
+  const persistUsername = async (username) => {
+    const cleaned = String(username || "")
+      .trim()
+      .replace(/^@+/, "")
+      .toLowerCase();
+
+    if (cleaned.length < 2) {
+      throw new Error("Username must be at least 2 characters.");
+    }
+    if (!/^[a-z0-9_.]{2,24}$/.test(cleaned)) {
+      throw new Error(
+        "Username can only use letters, numbers, periods, and underscores.",
+      );
+    }
+
+    if (profileData?.canChangeUsernameIn > 0) {
+      throw new Error(
+        `You can change your username again in ${profileData.canChangeUsernameIn} days.`,
+      );
+    }
+
+    const usernameRes = await fetch("/api/profile/update-username", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ username: cleaned }),
+    });
+    const usernameData = await usernameRes.json().catch(() => ({}));
+    if (!usernameRes.ok) {
+      throw new Error(
+        usernameData.error || usernameData.detail || "Failed to update username",
+      );
+    }
+    return { ...usernameData, username: cleaned };
   };
 
   const handleImagePick = async (e) => {
@@ -132,25 +181,23 @@ export default function EditProfilePage() {
       return;
     }
 
-    // Optimistic UI
     setFormData((prev) => ({ ...prev, profileImage: url }));
 
-    // Persist immediately so profile shows the photo without requiring Save
     try {
       setStatusMsg("Saving photo...");
       await persistProfileImage(url);
       setOriginalData((prev) => (prev ? { ...prev, profileImage: url } : prev));
       await refetch?.();
-      setStatusMsg("Photo updated.");
-      setTimeout(() => setStatusMsg(null), 2000);
+      flashStatus("Photo updated.");
     } catch (err) {
       console.error(err);
-      setErrorMsg(err.message || "Photo uploaded but could not be saved to your profile.");
+      setErrorMsg(err.message || "Photo uploaded but could not be saved.");
       setStatusMsg(null);
     }
   };
 
   const openEditModal = (field) => {
+    setErrorMsg(null);
     let value = "";
     if (field === "name") value = formData.displayName;
     else if (field === "username") value = formData.username;
@@ -160,72 +207,143 @@ export default function EditProfilePage() {
   };
 
   const closeEditModal = () => {
+    if (fieldSaving) return;
     setEditingField(null);
     setEditValue("");
   };
 
-  const saveFieldEdit = () => {
-    if (editingField === "name") {
-      setFormData((prev) => ({ ...prev, displayName: editValue }));
-    } else if (editingField === "username") {
-      setFormData((prev) => ({
-        ...prev,
-        username: editValue.toLowerCase().replace(/[^a-z0-9._]/g, ""),
-      }));
-    } else if (editingField === "bio") {
-      setFormData((prev) => ({ ...prev, bio: editValue }));
+  /**
+   * TikTok-style: Done on a field screen validates + writes to the server,
+   * then returns to the edit profile list. No separate top-level Save required.
+   */
+  const saveFieldEdit = async () => {
+    if (!editingField || fieldSaving) return;
+    setErrorMsg(null);
+    setStatusMsg(null);
+
+    const field = editingField;
+
+    // Username
+    if (field === "username") {
+      const next = editValue.toLowerCase().replace(/[^a-z0-9._]/g, "");
+      if (next === (originalData?.username || "")) {
+        closeEditModal();
+        return;
+      }
+      setFieldSaving(true);
+      try {
+        await persistUsername(next);
+        setFormData((prev) => ({ ...prev, username: next }));
+        setOriginalData((prev) => (prev ? { ...prev, username: next } : prev));
+        setProfileData((prev) =>
+          prev
+            ? {
+                ...prev,
+                username: next,
+                canChangeUsernameIn: 30,
+                username_last_changed: new Date().toISOString(),
+              }
+            : prev,
+        );
+        await refetch?.();
+        setEditingField(null);
+        setEditValue("");
+        flashStatus("Username updated.");
+      } catch (err) {
+        setErrorMsg(err.message || "Could not update username");
+      } finally {
+        setFieldSaving(false);
+      }
+      return;
     }
-    closeEditModal();
+
+    // Name
+    if (field === "name") {
+      const next = String(editValue || "").trim().slice(0, 30);
+      if (next === (originalData?.displayName || "")) {
+        closeEditModal();
+        return;
+      }
+      setFieldSaving(true);
+      try {
+        await persistNameAndBio({ displayName: next, bio: formData.bio });
+        setFormData((prev) => ({ ...prev, displayName: next }));
+        setOriginalData((prev) => (prev ? { ...prev, displayName: next } : prev));
+        await refetch?.();
+        setEditingField(null);
+        setEditValue("");
+        flashStatus("Name updated.");
+      } catch (err) {
+        setErrorMsg(err.message || "Could not update name");
+      } finally {
+        setFieldSaving(false);
+      }
+      return;
+    }
+
+    // Bio
+    if (field === "bio") {
+      const next = String(editValue || "").slice(0, 80);
+      if (next === (originalData?.bio || "")) {
+        closeEditModal();
+        return;
+      }
+      setFieldSaving(true);
+      try {
+        await persistNameAndBio({
+          displayName: formData.displayName,
+          bio: next,
+        });
+        setFormData((prev) => ({ ...prev, bio: next }));
+        setOriginalData((prev) => (prev ? { ...prev, bio: next } : prev));
+        await refetch?.();
+        setEditingField(null);
+        setEditValue("");
+        flashStatus("Bio updated.");
+      } catch (err) {
+        setErrorMsg(err.message || "Could not update bio");
+      } finally {
+        setFieldSaving(false);
+      }
+    }
   };
 
+  /** Optional bulk save — keeps parity if user still taps top Save */
   const handleSave = async () => {
     setErrorMsg(null);
     setStatusMsg(null);
 
-    if (!hasChanges) {
+    const nameChanged =
+      formData.displayName !== (originalData?.displayName || "");
+    const bioChanged = formData.bio !== (originalData?.bio || "");
+    const usernameChanged =
+      formData.username.trim() !== (originalData?.username || "").trim();
+
+    if (!nameChanged && !bioChanged && !usernameChanged) {
       window.location.href = "/profile";
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const response = await fetch("/api/profile/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
+      if (nameChanged || bioChanged) {
+        await persistNameAndBio({
           displayName: formData.displayName,
           bio: formData.bio,
-          profileImage: formData.profileImage,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.error || data.detail || "Failed to update profile");
+        });
       }
 
-      const usernameChanged =
-        formData.username.trim() !== (originalData?.username || "").trim();
       if (usernameChanged && formData.username.trim().length >= 2) {
-        if (profileData?.canChangeUsernameIn > 0) {
-          throw new Error(
-            `You can change your username again in ${profileData.canChangeUsernameIn} days.`,
-          );
-        }
-
-        const usernameRes = await fetch("/api/profile/update-username", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ username: formData.username.trim() }),
-        });
-        const usernameData = await usernameRes.json().catch(() => ({}));
-        if (!usernameRes.ok) {
-          throw new Error(
-            usernameData.error || usernameData.detail || "Failed to update username",
-          );
-        }
+        await persistUsername(formData.username.trim());
+        setProfileData((prev) =>
+          prev
+            ? {
+                ...prev,
+                username: formData.username.trim(),
+                canChangeUsernameIn: 30,
+              }
+            : prev,
+        );
       }
 
       saveCompletedRef.current = true;
@@ -292,12 +410,10 @@ export default function EditProfilePage() {
           <button
             type="button"
             onClick={handleSave}
-            disabled={isSubmitting || uploading}
-            className={`text-base font-semibold transition-opacity ${
-              hasChanges ? "text-white" : "text-white/40"
-            } ${isSubmitting ? "opacity-50" : "hover:opacity-70"}`}
+            disabled={isSubmitting || uploading || fieldSaving}
+            className="text-base font-semibold text-white hover:opacity-70 transition-opacity disabled:opacity-40"
           >
-            {isSubmitting ? "Saving" : "Save"}
+            {isSubmitting ? "Saving" : "Done"}
           </button>
         </div>
       </div>
@@ -320,7 +436,7 @@ export default function EditProfilePage() {
             type="file"
             accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
             onChange={handleImagePick}
-            disabled={uploading || isSubmitting}
+            disabled={uploading || isSubmitting || fieldSaving}
             className="hidden"
           />
           <div className="flex flex-col items-center">
@@ -378,8 +494,8 @@ export default function EditProfilePage() {
 
         <div className="px-4 pt-6">
           <p className="text-white/40 text-sm text-center leading-relaxed">
-            Your profile is public. Photo saves as soon as you pick one. Name and bio need Save;
-            username can change once every 30 days.
+            Changes save when you tap Done on each field. Username can be changed once every 30
+            days. Public link: crestarhq.com/{formData.username || "yourname"}
           </p>
         </div>
       </div>
@@ -391,7 +507,8 @@ export default function EditProfilePage() {
               <button
                 type="button"
                 onClick={closeEditModal}
-                className="text-white text-base hover:opacity-70"
+                disabled={fieldSaving}
+                className="text-white text-base hover:opacity-70 disabled:opacity-40"
               >
                 Cancel
               </button>
@@ -399,14 +516,21 @@ export default function EditProfilePage() {
               <button
                 type="button"
                 onClick={saveFieldEdit}
-                className="text-white text-base font-semibold hover:opacity-70"
+                disabled={fieldSaving}
+                className="text-white text-base font-semibold hover:opacity-70 disabled:opacity-40"
               >
-                Done
+                {fieldSaving ? "Saving" : "Done"}
               </button>
             </div>
           </div>
 
           <div className="max-w-2xl mx-auto p-4">
+            {errorMsg && editingField && (
+              <div className="mb-3 px-3 py-2.5 rounded-lg text-sm bg-red-500/15 text-red-300 border border-red-500/30">
+                {errorMsg}
+              </div>
+            )}
+
             {editingField === "username" && (
               <div className="flex items-center border-b border-white pb-1">
                 <span className="text-white/60 text-lg mr-1">@</span>
@@ -419,6 +543,7 @@ export default function EditProfilePage() {
                   placeholder={fieldConfig?.placeholder}
                   autoFocus
                   maxLength={fieldConfig?.maxLength}
+                  disabled={fieldSaving}
                   className="flex-1 bg-transparent text-white text-lg py-3 outline-none placeholder:text-white/30"
                 />
               </div>
@@ -431,6 +556,7 @@ export default function EditProfilePage() {
                 placeholder={fieldConfig?.placeholder}
                 autoFocus
                 maxLength={fieldConfig?.maxLength}
+                disabled={fieldSaving}
                 className="w-full bg-transparent text-white text-lg border-b border-white py-3 outline-none placeholder:text-white/30"
               />
             )}
@@ -442,6 +568,7 @@ export default function EditProfilePage() {
                 autoFocus
                 maxLength={fieldConfig?.maxLength}
                 rows={4}
+                disabled={fieldSaving}
                 className="w-full bg-transparent text-white text-lg border-b border-white py-3 outline-none resize-none placeholder:text-white/30"
               />
             )}
@@ -451,7 +578,8 @@ export default function EditProfilePage() {
             {editingField === "username" && (
               <div className="mt-5">
                 <p className="text-white/60 text-sm leading-relaxed">
-                  Letters, numbers, periods, underscores. Change once every 30 days.
+                  Letters, numbers, periods, underscores. You can change your username once every 30
+                  days.
                 </p>
                 {profileData?.canChangeUsernameIn > 0 && (
                   <div className="flex items-start gap-2 mt-3 bg-[#F59E0B]/10 p-3 rounded-lg border border-[#F59E0B]/20">
