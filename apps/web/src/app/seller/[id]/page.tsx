@@ -18,22 +18,44 @@ import {
   Loader2,
 } from 'lucide-react';
 
+/**
+ * TikTok-style profile exit:
+ * - Never bounce back into /inbox (that caused chat ↔ profile loops).
+ * - Prefer the screen the user was on before this profile (feed/home).
+ * - Video referrer → feed.
+ */
 function goBackFromProfile() {
+  try {
+    const skip = sessionStorage.getItem('crestar_skip_inbox_back');
+    if (skip) sessionStorage.removeItem('crestar_skip_inbox_back');
+  } catch {}
+
   try {
     const ref = document.referrer;
     if (ref) {
       const u = new URL(ref);
-      if (u.origin === window.location.origin && u.pathname.startsWith('/video/')) {
-        window.location.assign('/');
-        return;
+      if (u.origin === window.location.origin) {
+        if (u.pathname.startsWith('/video/')) {
+          window.location.assign('/');
+          return;
+        }
+        // Coming back from messaging: do not re-enter inbox
+        if (u.pathname === '/inbox' || u.pathname.startsWith('/inbox/')) {
+          window.location.assign('/');
+          return;
+        }
       }
     }
   } catch {}
-  if (window.history.length > 1) {
-    window.history.back();
-  } else {
-    window.location.assign('/');
-  }
+
+  // Walk back past any residual /inbox entries without looping on this profile
+  try {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+  } catch {}
+  window.location.assign('/');
 }
 
 function VideoThumb({ thumbnailUrl, videoUrl, className }) {
@@ -225,7 +247,6 @@ export default function PublicProfilePage() {
 
   const openMessage = () => {
     if (!resolvedUserId) return;
-    // Prefer clean handle path so back lands on the same public profile URL
     const profilePath = profile?.username
       ? `/${profile.username}`
       : `/seller/${resolvedUserId}`;
@@ -239,7 +260,9 @@ export default function PublicProfilePage() {
         `/account/signin?callbackUrl=${encodeURIComponent(inboxUrl)}`;
       return;
     }
-    window.location.href = inboxUrl;
+    // Replace keeps the stack clean: […, profile] → […, inbox]
+    // Chat back then replace→profile → […, profile] so profile Back leaves the loop.
+    window.location.assign(inboxUrl);
   };
 
   if (loading) {
@@ -287,7 +310,7 @@ export default function PublicProfilePage() {
     <div className="min-h-screen bg-black text-white pb-24">
       <div className="sticky top-0 z-20 bg-black/90 backdrop-blur border-b border-white/10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button type="button" onClick={goBackFromProfile} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"><ArrowLeft size={20} /></button>
+          <button type="button" onClick={goBackFromProfile} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20" aria-label="Back"><ArrowLeft size={20} /></button>
           <span className="font-semibold text-sm">@{profile.username}</span>
           <button type="button" onClick={handleShare} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"><Share2 size={18} /></button>
         </div>
