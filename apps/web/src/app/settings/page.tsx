@@ -44,6 +44,16 @@ export default function SettingsPage() {
     }
   };
 
+  /**
+   * Leave the settings tree entirely.
+   * Do NOT use history.back() here — after visiting Privacy (or other subpages)
+   * that link back with href="/settings", history.back() re-enters Privacy
+   * and creates a settings ↔ privacy loop.
+   */
+  const handleBack = () => {
+    window.location.assign('/profile');
+  };
+
   if (loading || !user) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -64,7 +74,7 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-black text-white">
       <div className="sticky top-0 z-40 glass-strong">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button type="button" onClick={() => window.history.back()} className="p-1">
+          <button type="button" onClick={handleBack} className="p-1" aria-label="Back">
             <ArrowLeft size={22} />
           </button>
           <h1 className="text-lg font-semibold">{t('settings')}</h1>
