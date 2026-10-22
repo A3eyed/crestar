@@ -129,7 +129,6 @@ export default function PublicProfilePage() {
       setResolvedUserId(uid);
       setFollowerCount(data.profile?.stats?.followers ?? data.profile?.followers_count ?? 0);
       setFollowingCount(data.profile?.stats?.following ?? data.profile?.following_count ?? 0);
-      // Header ready — paint immediately (TikTok progressive load)
       setLoading(false);
 
       if (uid) {
@@ -226,11 +225,21 @@ export default function PublicProfilePage() {
 
   const openMessage = () => {
     if (!resolvedUserId) return;
+    // Prefer clean handle path so back lands on the same public profile URL
+    const profilePath = profile?.username
+      ? `/${profile.username}`
+      : `/seller/${resolvedUserId}`;
+    const qs = new URLSearchParams({
+      userId: String(resolvedUserId),
+      returnTo: profilePath,
+    });
+    const inboxUrl = `/inbox?${qs.toString()}`;
     if (!user) {
-      window.location.href = `/account/signin?callbackUrl=/inbox?userId=${encodeURIComponent(resolvedUserId)}`;
+      window.location.href =
+        `/account/signin?callbackUrl=${encodeURIComponent(inboxUrl)}`;
       return;
     }
-    window.location.href = `/inbox?userId=${encodeURIComponent(resolvedUserId)}`;
+    window.location.href = inboxUrl;
   };
 
   if (loading) {
