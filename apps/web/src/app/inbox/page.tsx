@@ -3,7 +3,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import useUser from '@/utils/useUser';
 import BottomNav from '@/components/BottomNav';
-import { ArrowLeft, Inbox as InboxIcon, Send, BadgeCheck, Bell, ShoppingBag, Heart, UserPlus, MessageCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  Inbox as InboxIcon,
+  Send,
+  BadgeCheck,
+  Bell,
+  ShoppingBag,
+  Heart,
+  UserPlus,
+  MessageCircle,
+} from 'lucide-react';
+
+const GOLD = '#D4AF37';
+const BADGE = '#FE2C55';
 
 function formatTime(iso) {
   if (!iso) return '';
@@ -51,7 +64,8 @@ function activityHref(n) {
 }
 
 function activityIcon(type) {
-  if (type === 'new_order' || type === 'order' || type === 'sale') return ShoppingBag;
+  if (type === 'new_order' || type === 'order' || type === 'sale' || type === 'payout')
+    return ShoppingBag;
   if (type === 'like') return Heart;
   if (type === 'follow') return UserPlus;
   if (type === 'message') return MessageCircle;
@@ -60,6 +74,7 @@ function activityIcon(type) {
 
 export default function InboxPage() {
   const { data: user, loading: userLoading } = useUser();
+  const [tab, setTab] = useState('messages'); // messages | activity
   const [conversations, setConversations] = useState([]);
   const [activityItems, setActivityItems] = useState([]);
   const [activityUnread, setActivityUnread] = useState(0);
@@ -107,6 +122,26 @@ export default function InboxPage() {
     }
     if (user?.id) fetchConversations();
   }, [user?.id, userLoading, fetchConversations]);
+
+  const markAllActivityRead = useCallback(async () => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'mark_all_read' }),
+      });
+      setActivityItems((prev) => prev.map((x) => ({ ...x, is_read: true })));
+      setActivityUnread(0);
+    } catch {}
+  }, []);
+
+  const selectTab = (next) => {
+    setTab(next);
+    if (next === 'activity' && activityUnread > 0) {
+      markAllActivityRead();
+    }
+  };
 
   const loadMessages = useCallback(async ({ partnerId, conversationId } = {}) => {
     if (!partnerId && !conversationId) return;
@@ -205,6 +240,8 @@ export default function InboxPage() {
     const target =
       params.get('userId') || params.get('partnerId') || params.get('to');
     const conversationId = params.get('conversationId');
+    const tabParam = params.get('tab');
+    if (tabParam === 'activity') setTab('activity');
     if (!target && !conversationId) return;
 
     deepLinkHandled.current = true;
@@ -433,25 +470,76 @@ export default function InboxPage() {
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       <div className="sticky top-0 z-20 bg-black border-b border-white/10">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-4">
-          <a
-            href="/profile"
-            className="w-10 h-10 bg-white/10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/20"
-          >
-            <ArrowLeft size={20} />
-          </a>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            Inbox
-            {totalUnread > 0 && (
-              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#FE2C55] text-white text-[11px] font-bold flex items-center justify-center">
-                {totalUnread > 99 ? '99+' : totalUnread}
-              </span>
-            )}
-          </h1>
+        <div className="max-w-2xl mx-auto px-4 pt-4 pb-0">
+          <div className="flex items-center gap-4 mb-3">
+            <a
+              href="/profile"
+              className="w-10 h-10 bg-white/10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/20"
+            >
+              <ArrowLeft size={20} />
+            </a>
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              Inbox
+              {totalUnread > 0 && (
+                <span
+                  className="min-w-[20px] h-5 px-1.5 rounded-full text-white text-[11px] font-bold flex items-center justify-center"
+                  style={{ backgroundColor: BADGE }}
+                >
+                  {totalUnread > 99 ? '99+' : totalUnread}
+                </span>
+              )}
+            </h1>
+          </div>
+
+          {/* Crestar segmented control — not a TikTok clone */}
+          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.06] border border-white/10 mb-0">
+            <button
+              type="button"
+              onClick={() => selectTab('messages')}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+                tab === 'messages'
+                  ? 'bg-[#D4AF37] text-black'
+                  : 'text-white/55 hover:text-white'
+              }`}
+            >
+              Messages
+              {messageUnread > 0 && (
+                <span
+                  className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                    tab === 'messages' ? 'bg-black/20 text-black' : 'text-white'
+                  }`}
+                  style={tab !== 'messages' ? { backgroundColor: BADGE } : undefined}
+                >
+                  {messageUnread > 99 ? '99+' : messageUnread}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTab('activity')}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+                tab === 'activity'
+                  ? 'bg-[#D4AF37] text-black'
+                  : 'text-white/55 hover:text-white'
+              }`}
+            >
+              Activity
+              {activityUnread > 0 && (
+                <span
+                  className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                    tab === 'activity' ? 'bg-black/20 text-black' : 'text-white'
+                  }`}
+                  style={tab !== 'activity' ? { backgroundColor: BADGE } : undefined}
+                >
+                  {activityUnread > 99 ? '99+' : activityUnread}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-2">
+      <div className="max-w-2xl mx-auto px-4 py-3">
         {loading ? (
           <div className="flex justify-center py-16">
             <div
@@ -459,62 +547,66 @@ export default function InboxPage() {
               style={{ animation: 'inbox-spin 1s linear infinite' }}
             />
           </div>
-        ) : conversations.length === 0 && activityItems.length === 0 ? (
+        ) : tab === 'activity' ? (
+          activityItems.length === 0 ? (
+            <div className="text-center py-16">
+              <Bell size={48} className="text-white/20 mx-auto mb-4" />
+              <p className="text-white/50">No activity yet</p>
+              <p className="text-white/30 text-sm mt-1">
+                Orders, likes, follows, and sales alerts appear here
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {activityItems.map((n) => {
+                const Icon = activityIcon(n.type);
+                const unread = !n.is_read;
+                return (
+                  <button
+                    key={`act-${n.id}`}
+                    type="button"
+                    onClick={() => openActivity(n)}
+                    className={`w-full flex items-center gap-3 px-3 py-3.5 rounded-xl transition-colors text-left ${
+                      unread ? 'bg-white/[0.05]' : 'hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
+                      <Icon size={22} className="text-[#D4AF37]" />
+                      {unread && (
+                        <span
+                          className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-black"
+                          style={{ backgroundColor: BADGE }}
+                        />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`text-sm truncate ${
+                          unread ? 'font-bold text-white' : 'font-semibold text-white/90'
+                        }`}
+                      >
+                        {n.title || 'Update'}
+                      </p>
+                      <p className="text-white/50 text-sm truncate mt-0.5">{n.body || ''}</p>
+                    </div>
+                    <span className="text-white/30 text-[11px] shrink-0">
+                      {n.created_at ? formatTime(n.created_at) : ''}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )
+        ) : conversations.length === 0 ? (
           <div className="text-center py-16">
             <InboxIcon size={48} className="text-white/20 mx-auto mb-4" />
-            <p className="text-white/50">Inbox is empty</p>
+            <p className="text-white/50">No messages</p>
             <p className="text-white/30 text-sm mt-1">
-              Messages and activity (orders, likes, follows) show up here
+              Chats with buyers, sellers, and Crestar support land here
             </p>
           </div>
         ) : (
           <div className="space-y-0.5">
-            {activityItems.length > 0 && (
-              <>
-                <p className="text-white/40 text-xs font-semibold uppercase tracking-wide px-3 pt-2 pb-1">
-                  Activity
-                </p>
-                {activityItems.map((n) => {
-                  const Icon = activityIcon(n.type);
-                  const unread = !n.is_read;
-                  return (
-                    <button
-                      key={`act-${n.id}`}
-                      type="button"
-                      onClick={() => openActivity(n)}
-                      className={`w-full flex items-center gap-3 px-3 py-3.5 rounded-xl transition-colors text-left ${
-                        unread ? 'bg-white/[0.05]' : 'hover:bg-white/5'
-                      }`}
-                    >
-                      <div className="relative w-12 h-12 rounded-full overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
-                        <Icon size={22} className="text-[#D4AF37]" />
-                        {unread && (
-                          <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#FE2C55] border-2 border-black" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`text-sm truncate ${
-                            unread ? 'font-bold text-white' : 'font-semibold text-white/90'
-                          }`}
-                        >
-                          {n.title || 'Notification'}
-                        </p>
-                        <p className="text-white/50 text-sm truncate mt-0.5">{n.body || ''}</p>
-                      </div>
-                      <span className="text-white/30 text-[11px] shrink-0">
-                        {n.created_at ? formatTime(n.created_at) : ''}
-                      </span>
-                    </button>
-                  );
-                })}
-                {conversations.length > 0 && (
-                  <p className="text-white/40 text-xs font-semibold uppercase tracking-wide px-3 pt-3 pb-1">
-                    Messages
-                  </p>
-                )}
-              </>
-            )}
             {conversations.map((conv) => {
               const isSupport =
                 String(conv.conversation_id || '').startsWith('support_') ||
@@ -544,13 +636,20 @@ export default function InboxPage() {
                       </span>
                     )}
                     {unread > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#FE2C55] border-2 border-black" />
+                      <span
+                        className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-black"
+                        style={{ backgroundColor: BADGE }}
+                      />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className={`text-sm truncate ${unread > 0 ? 'font-bold' : 'font-semibold'}`}>
+                        <span
+                          className={`text-sm truncate ${
+                            unread > 0 ? 'font-bold' : 'font-semibold'
+                          }`}
+                        >
                           {name}
                         </span>
                         {(conv.partner_verified || isSupport) && (
@@ -570,7 +669,10 @@ export default function InboxPage() {
                     </p>
                   </div>
                   {unread > 0 && (
-                    <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#FE2C55] text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    <span
+                      className="min-w-[22px] h-[22px] px-1.5 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: BADGE }}
+                    >
                       {unread > 99 ? '99+' : unread}
                     </span>
                   )}
