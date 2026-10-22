@@ -51,18 +51,20 @@ export default function EditProfilePage() {
     try {
       const response = await fetch(`/api/profile/update?_t=${Date.now()}`, {
         credentials: "include",
+        cache: "no-store",
       });
       if (response.ok) {
         const data = await response.json();
         if (data.user) {
           setProfileData(data.user);
+          const img =
+            data.user.profile_image || user?.profile_image || user?.image || null;
           const initial = {
             username: data.user.username || user?.username || "",
             displayName:
               data.user.display_name || data.user.name || user?.name || "",
             bio: data.user.bio || "",
-            profileImage:
-              data.user.profile_image || user?.profile_image || user?.image || null,
+            profileImage: img,
           };
           setFormData(initial);
           setOriginalData(initial);
@@ -92,6 +94,20 @@ export default function EditProfilePage() {
       formData.bio !== originalData.bio ||
       formData.profileImage !== originalData.profileImage);
 
+  const persistProfileImage = async (url) => {
+    const response = await fetch("/api/profile/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ profileImage: url }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || data.detail || "Could not save photo");
+    }
+    return data;
+  };
+
   const handleImagePick = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -99,8 +115,8 @@ export default function EditProfilePage() {
     setErrorMsg(null);
     setStatusMsg(null);
 
-    if (!file.type.startsWith("image/")) {
-      setErrorMsg("Please choose an image file (JPEG, PNG, or WebP).");
+    if (!file.type.startsWith("image/") && file.type !== "") {
+      setErrorMsg("Please choose an image file (JPEG, PNG, WebP, or HEIC).");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -108,13 +124,30 @@ export default function EditProfilePage() {
       return;
     }
 
-    const { url, error } = await upload({ file });
+    setStatusMsg("Uploading photo...");
+    const { url, error } = await upload({ file, folder: "avatars" });
     if (error || !url) {
       setErrorMsg(error || "Upload failed. Please try again.");
+      setStatusMsg(null);
       return;
     }
+
+    // Optimistic UI
     setFormData((prev) => ({ ...prev, profileImage: url }));
-    setStatusMsg("Photo ready — tap Save to apply.");
+
+    // Persist immediately so profile shows the photo without requiring Save
+    try {
+      setStatusMsg("Saving photo...");
+      await persistProfileImage(url);
+      setOriginalData((prev) => (prev ? { ...prev, profileImage: url } : prev));
+      await refetch?.();
+      setStatusMsg("Photo updated.");
+      setTimeout(() => setStatusMsg(null), 2000);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message || "Photo uploaded but could not be saved to your profile.");
+      setStatusMsg(null);
+    }
   };
 
   const openEditModal = (field) => {
@@ -150,7 +183,7 @@ export default function EditProfilePage() {
     setStatusMsg(null);
 
     if (!hasChanges) {
-      window.history.back();
+      window.location.href = "/profile";
       return;
     }
 
@@ -250,7 +283,7 @@ export default function EditProfilePage() {
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
             type="button"
-            onClick={() => window.history.back()}
+            onClick={() => (window.location.href = "/profile")}
             className="text-white text-base hover:opacity-70 transition-opacity"
           >
             Cancel
@@ -298,6 +331,7 @@ export default function EditProfilePage() {
                     src={formData.profileImage}
                     alt=""
                     className="w-full h-full object-cover"
+                    key={formData.profileImage}
                   />
                 ) : (
                   <span className="text-white text-4xl font-bold">
@@ -344,8 +378,8 @@ export default function EditProfilePage() {
 
         <div className="px-4 pt-6">
           <p className="text-white/40 text-sm text-center leading-relaxed">
-            Your profile is public. Name and bio update immediately; username can change once every
-            30 days. Public link: crestarhq.com/yourname
+            Your profile is public. Photo saves as soon as you pick one. Name and bio need Save;
+            username can change once every 30 days.
           </p>
         </div>
       </div>
