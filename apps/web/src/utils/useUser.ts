@@ -5,13 +5,8 @@ import { useSession } from '@/lib/auth-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * useUser — returns the signed-in user enriched with their full Crestar
- * profile (username, display_name, bio, profile_image, is_verified, role,
- * followers/following counts...).
- *
- * The better-auth session only contains id/name/email/image, so we merge
- * in the profile from /api/profile/update (GET). Without this, username
- * changes never show up on the web.
+ * useUser — signed-in user + Crestar profile (username, display_name, bio,
+ * profile_image, is_verified, role, follower counts).
  */
 export const useUser = () => {
   const { data, isPending, refetch } = useSession();
@@ -25,7 +20,10 @@ export const useUser = () => {
     if (!sessionUser?.id) return;
     try {
       setProfileLoading(true);
-      const res = await fetch(`/api/profile/update?_t=${Date.now()}`);
+      const res = await fetch(`/api/profile/update?_t=${Date.now()}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.user) {
@@ -50,13 +48,28 @@ export const useUser = () => {
     }
   }, [sessionUser?.id, fetchProfile]);
 
-  // Profile fields win over session fields (profile has the fresh username)
-  const user = sessionUser ? { ...sessionUser, ...(profile || {}) } : null;
+  // Profile row wins; normalize avatar so UI can use either field
+  const user = sessionUser
+    ? {
+        ...sessionUser,
+        ...(profile || {}),
+        profile_image:
+          profile?.profile_image ||
+          sessionUser.profile_image ||
+          sessionUser.image ||
+          null,
+        image:
+          profile?.profile_image ||
+          sessionUser.image ||
+          sessionUser.profile_image ||
+          null,
+      }
+    : null;
 
   const refetchAll = useCallback(() => {
     refetch?.();
     fetchedForId.current = null;
-    fetchProfile();
+    return fetchProfile();
   }, [refetch, fetchProfile]);
 
   return {
