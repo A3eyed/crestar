@@ -3,6 +3,8 @@
 
 import { useState, useCallback } from "react";
 
+const GOLD = "#D4AF37";
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,7 +28,7 @@ export default function ForgotPasswordPage() {
         const response = await fetch("/api/auth/forgot-password", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email: email.trim().toLowerCase() }),
         });
 
         const data = await response.json();
@@ -51,7 +53,10 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 bg-black">
       <div className="mb-10">
-        <h1 className="text-3xl font-bold tracking-[0.25em] text-center text-white">
+        <h1
+          className="text-3xl font-bold tracking-[0.25em] text-center"
+          style={{ color: GOLD }}
+        >
           CRESTAR
         </h1>
       </div>
@@ -59,10 +64,14 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-sm">
         {success ? (
           <div className="space-y-6">
-            <div className="rounded-lg bg-[#1A3A1A] border border-[#2A5A2A] p-6 text-center">
-              <div className="w-16 h-16 rounded-full bg-[#2A5A2A] flex items-center justify-center mx-auto mb-4">
+            <div className="rounded-xl bg-white/[0.06] border border-white/10 p-6 text-center">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                style={{ backgroundColor: "rgba(212,175,55,0.15)" }}
+              >
                 <svg
-                  className="w-8 h-8 text-green-400"
+                  className="w-8 h-8"
+                  style={{ color: GOLD }}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -76,17 +85,19 @@ export default function ForgotPasswordPage() {
                 </svg>
               </div>
               <h2 className="text-xl font-semibold text-white mb-2">
-                Check Your Email
+                Check your email
               </h2>
-              <p className="text-sm text-gray-300">
-                We've sent password reset instructions to{" "}
-                <span className="font-semibold">{email}</span>
+              <p className="text-sm text-white/55">
+                If an account exists for{" "}
+                <span className="font-semibold text-white/80">{email}</span>,
+                you will receive reset instructions shortly.
               </p>
             </div>
 
             <a
               href="/account/signin"
-              className="block w-full bg-[#FF3B5C] text-white text-center text-[16px] font-semibold py-[14px] rounded-lg hover:bg-[#FF2549] transition-colors"
+              className="block w-full text-black text-center text-[16px] font-semibold py-[14px] rounded-xl hover:opacity-90 transition-opacity"
+              style={{ backgroundColor: GOLD }}
             >
               Back to Sign In
             </a>
@@ -95,10 +106,10 @@ export default function ForgotPasswordPage() {
           <>
             <div className="mb-8 text-center">
               <h2 className="text-2xl font-bold text-white mb-2">
-                Forgot Password?
+                Forgot password?
               </h2>
-              <p className="text-sm text-[#666]">
-                Enter your email and we'll send you reset instructions
+              <p className="text-sm text-white/45">
+                Enter your email and we will send reset instructions
               </p>
             </div>
 
@@ -115,28 +126,29 @@ export default function ForgotPasswordPage() {
                 placeholder="Email address"
                 autoCapitalize="none"
                 autoComplete="email"
-                className="w-full text-[16px] px-4 py-[14px] rounded-lg border bg-[#1A1A1A] text-white border-[#333] placeholder:text-[#666] focus:border-[#555] outline-none"
+                className="w-full text-[16px] px-4 py-[14px] rounded-xl border bg-white/[0.06] text-white border-white/15 placeholder:text-white/35 focus:border-[#D4AF37] outline-none"
               />
 
               {error && (
-                <div className="rounded-lg px-4 py-3 bg-[#2A1215] border border-[#FF3B5C33]">
-                  <p className="text-[#FF3B5C] text-sm text-center">{error}</p>
+                <div className="rounded-xl px-4 py-3 bg-red-500/10 border border-red-500/30">
+                  <p className="text-red-400 text-sm text-center">{error}</p>
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#FF3B5C] text-white text-[16px] font-semibold py-[14px] rounded-lg disabled:opacity-50 active:opacity-80"
+                className="w-full text-black text-[16px] font-semibold py-[14px] rounded-xl disabled:opacity-50 active:opacity-80"
+                style={{ backgroundColor: GOLD }}
               >
-                {loading ? "Sending..." : "Send Reset Link"}
+                {loading ? "Sending..." : "Send reset link"}
               </button>
             </form>
 
             <div className="mt-6 text-center">
               <a
                 href="/account/signin"
-                className="text-sm text-[#666] hover:text-white transition-colors"
+                className="text-sm text-white/45 hover:text-white transition-colors"
               >
                 ← Back to Sign In
               </a>
