@@ -9,7 +9,6 @@ const SITE_URL = 'https://crestarhq.com';
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    // Brand-first: "Crestar" alone should surface the product without needing Ghana/Africa
     default: 'Crestar | Shop Sell and Live Commerce',
     template: '%s | Crestar',
   },
@@ -27,6 +26,8 @@ export const metadata = {
     'Crestar social commerce',
     'Crestar live',
     'Crestar FoodHub',
+    'Shop Live',
+    'Live Shop',
     'Abdallah Fuseini',
     'Abdallah Fuseini Crestar',
     'Crestar founder',
@@ -102,11 +103,14 @@ export const metadata = {
     canonical: SITE_URL,
   },
   verification: {
-    // Add Google Search Console token when available:
     // google: 'your-google-site-verification-token',
   },
 };
 
+/**
+ * Brand + short function labels unique to Crestar (commerce first).
+ * Not entertainment / short-video framing.
+ */
 const structuredData = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -114,14 +118,22 @@ const structuredData = {
       '@type': 'Organization',
       '@id': `${SITE_URL}/#organization`,
       name: 'Crestar',
-      alternateName: ['Crestar HQ', 'crestarhq', 'Crestar App', 'Crestar Marketplace'],
+      alternateName: [
+        'Crestar HQ',
+        'crestarhq',
+        'Shop Live',
+        'Live Shop',
+        'Shop Sell Live',
+        'Crestar Marketplace',
+      ],
+      slogan: 'Shop. Sell. Live.',
       url: SITE_URL,
       logo: {
         '@type': 'ImageObject',
         url: `${SITE_URL}/logo.png`,
       },
       description:
-        'Crestar is a social commerce platform for shopping, selling, live video, and FoodHub. Official site: crestarhq.com.',
+        'Crestar is a social commerce platform where people shop products, sell to buyers, host shoppable live sessions, and order through FoodHub. Official site: crestarhq.com.',
       founder: {
         '@type': 'Person',
         name: 'Abdallah Fuseini',
@@ -137,7 +149,12 @@ const structuredData = {
       '@type': 'WebSite',
       '@id': `${SITE_URL}/#website`,
       name: 'Crestar',
-      alternateName: ['Crestar HQ', 'Crestar Marketplace', 'crestarhq.com'],
+      alternateName: [
+        'Crestar HQ',
+        'crestarhq.com',
+        'Shop Live',
+        'Crestar Marketplace',
+      ],
       url: SITE_URL,
       publisher: { '@id': `${SITE_URL}/#organization` },
       inLanguage: 'en',
@@ -153,7 +170,13 @@ const structuredData = {
     {
       '@type': 'SoftwareApplication',
       name: 'Crestar',
-      alternateName: ['Crestar HQ', 'Crestar App'],
+      alternateName: [
+        'Crestar HQ',
+        'Crestar App',
+        'Shop Live',
+        'Live Shop',
+        'Shop Sell Live',
+      ],
       applicationCategory: 'ShoppingApplication',
       operatingSystem: 'Web, iOS, Android',
       url: SITE_URL,
@@ -163,7 +186,16 @@ const structuredData = {
         priceCurrency: 'USD',
       },
       description:
-        'Crestar app for shopping, selling, and live commerce. Official website crestarhq.com.',
+        'Crestar is the app to shop products, sell online, and host shoppable live sessions. FoodHub and seller tools included. Official website crestarhq.com.',
+      featureList: [
+        'Product shopping',
+        'Seller storefronts',
+        'Shoppable live sessions',
+        'Video product discovery',
+        'FoodHub ordering',
+        'In-app messaging',
+        'Wallet and payouts',
+      ],
     },
     {
       '@type': 'Person',
