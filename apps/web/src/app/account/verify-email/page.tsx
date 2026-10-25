@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 
 /**
  * Optional 6-digit email verification.
- * Users can skip and use the app; verification can be completed later.
+ * Clean, minimal layout. Users may continue without verifying.
  */
 export default function VerifyEmailPage() {
   const [code, setCode] = useState(['', '', '', '', '', '']);
@@ -59,7 +59,7 @@ export default function VerifyEmailPage() {
         setResendCooldown(60);
         if (!silent) setError(null);
       } else if (!silent) {
-        setError(data.error || 'Could not send code.');
+        setError(data.error || 'Could not send code');
       }
     } catch {
       if (!silent) setError('Could not send code. Please try again.');
@@ -125,12 +125,9 @@ export default function VerifyEmailPage() {
   if (success) {
     return (
       <div style={styles.container}>
-        <div style={styles.card}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-          <p style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: '0 0 8px' }}>
-            Email verified!
-          </p>
-          <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>Taking you to the app…</p>
+        <div style={styles.inner}>
+          <p style={styles.successTitle}>Email verified</p>
+          <p style={styles.muted}>Opening Crestar</p>
         </div>
       </div>
     );
@@ -138,39 +135,15 @@ export default function VerifyEmailPage() {
 
   return (
     <div style={styles.container}>
-      <h1
-        style={{
-          color: '#fff',
-          fontSize: 28,
-          fontWeight: 800,
-          letterSpacing: '0.2em',
-          margin: '0 0 6px',
-        }}
-      >
-        CRESTAR
-      </h1>
-      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, margin: '0 0 36px' }}>
-        Verify your email
-      </p>
+      <div style={styles.inner}>
+        <h1 style={styles.logo}>CRESTAR</h1>
 
-      <div style={styles.card}>
-        <div style={{ fontSize: 36, marginBottom: 12 }}>✉️</div>
-        <p style={{ color: '#fff', fontSize: 17, fontWeight: 700, margin: '0 0 8px' }}>
-          Enter your code
-        </p>
-        <p
-          style={{
-            color: 'rgba(255,255,255,0.4)',
-            fontSize: 13,
-            margin: '0 0 28px',
-            lineHeight: 1.6,
-          }}
-        >
-          We sent a 6-digit code to your email. You can verify now or skip and do it later — the app
-          is still available.
+        <h2 style={styles.title}>Enter code</h2>
+        <p style={styles.subtitle}>
+          A 6 digit code was sent to your email. Enter it below to verify your account.
         </p>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 24 }}>
+        <div style={styles.codeRow}>
           {code.map((digit, i) => (
             <input
               key={i}
@@ -181,99 +154,56 @@ export default function VerifyEmailPage() {
               maxLength={1}
               disabled={verifying}
               autoFocus={i === 0}
+              aria-label={`Digit ${i + 1}`}
               onChange={(e) => handleChangeDigit(e.target.value, i)}
               onKeyDown={(e) => handleKeyDown(e, i)}
               onPaste={i === 0 ? handlePaste : undefined}
               style={{
-                width: 46,
-                height: 54,
-                borderRadius: 12,
-                border: `2px solid ${digit ? '#fff' : 'rgba(255,255,255,0.2)'}`,
-                backgroundColor: 'rgba(255,255,255,0.07)',
-                color: '#fff',
-                fontSize: 24,
-                fontWeight: 700,
-                textAlign: 'center',
-                outline: 'none',
-                caretColor: 'transparent',
-                boxSizing: 'border-box',
+                ...styles.digit,
+                borderColor: digit ? '#D4AF37' : 'rgba(255,255,255,0.18)',
               }}
             />
           ))}
         </div>
 
-        {verifying && (
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, margin: '0 0 16px' }}>
-            Verifying…
-          </p>
-        )}
+        {verifying && <p style={styles.status}>Verifying</p>}
 
         {error && (
-          <div
-            style={{
-              backgroundColor: 'rgba(220,38,38,0.12)',
-              border: '1px solid rgba(220,38,38,0.28)',
-              borderRadius: 10,
-              padding: '10px 14px',
-              marginBottom: 16,
-            }}
-          >
-            <p style={{ color: '#F87171', fontSize: 13, margin: 0, textAlign: 'center' }}>{error}</p>
+          <div style={styles.errorBox}>
+            <p style={styles.errorText}>{error}</p>
           </div>
         )}
 
         <button
+          type="button"
           onClick={() => sendCode(false)}
           disabled={sending || resendCooldown > 0}
           style={{
-            background: 'none',
-            border: 'none',
-            color: resendCooldown > 0 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)',
-            fontSize: 13,
-            cursor: resendCooldown > 0 ? 'default' : 'pointer',
-            padding: '8px 0',
+            ...styles.resend,
+            color:
+              resendCooldown > 0 || sending
+                ? 'rgba(255,255,255,0.28)'
+                : '#D4AF37',
+            cursor: resendCooldown > 0 || sending ? 'default' : 'pointer',
           }}
         >
           {sending
-            ? 'Sending…'
+            ? 'Sending'
             : resendCooldown > 0
-              ? `Resend code in ${resendCooldown}s`
+              ? `Resend in ${resendCooldown}s`
               : 'Resend code'}
         </button>
 
         {optional && (
-          <button
-            type="button"
-            onClick={goApp}
-            style={{
-              marginTop: 16,
-              width: '100%',
-              padding: '14px 16px',
-              borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.2)',
-              background: 'transparent',
-              color: '#fff',
-              fontSize: 15,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Skip for now — continue to Crestar
+          <button type="button" onClick={goApp} style={styles.secondary}>
+            Not now
           </button>
         )}
-      </div>
 
-      <a
-        href="/account/logout"
-        style={{
-          color: 'rgba(255,255,255,0.25)',
-          fontSize: 12,
-          textDecoration: 'none',
-          marginTop: 24,
-        }}
-      >
-        Sign out
-      </a>
+        <a href="/account/logout" style={styles.signOut}>
+          Sign out
+        </a>
+      </div>
     </div>
   );
 }
@@ -287,17 +217,110 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '32px 20px',
+    padding: '40px 24px',
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     boxSizing: 'border-box',
   },
-  card: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 16,
-    padding: '28px 24px',
-    maxWidth: 360,
+  inner: {
     width: '100%',
+    maxWidth: 340,
     textAlign: 'center',
+  },
+  logo: {
+    color: '#D4AF37',
+    fontSize: 22,
+    fontWeight: 800,
+    letterSpacing: '0.28em',
+    margin: '0 0 40px',
+  },
+  title: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 700,
+    margin: '0 0 10px',
+    letterSpacing: '-0.02em',
+  },
+  subtitle: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 14,
+    lineHeight: 1.5,
+    margin: '0 0 28px',
+  },
+  codeRow: {
+    display: 'flex',
+    gap: 8,
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  digit: {
+    width: 46,
+    height: 54,
+    borderRadius: 10,
+    border: '1.5px solid rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 700,
+    textAlign: 'center',
+    outline: 'none',
+    caretColor: 'transparent',
+    boxSizing: 'border-box',
+  },
+  status: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
+    margin: '0 0 12px',
+  },
+  errorBox: {
+    backgroundColor: 'rgba(220,38,38,0.1)',
+    border: '1px solid rgba(220,38,38,0.25)',
+    borderRadius: 10,
+    padding: '10px 12px',
+    marginBottom: 12,
+  },
+  errorText: {
+    color: '#F87171',
+    fontSize: 13,
+    margin: 0,
+    textAlign: 'center',
+  },
+  resend: {
+    background: 'none',
+    border: 'none',
+    fontSize: 14,
+    fontWeight: 600,
+    padding: '12px 8px',
+    marginTop: 4,
+  },
+  secondary: {
+    display: 'block',
+    width: '100%',
+    marginTop: 8,
+    padding: '14px 16px',
+    borderRadius: 12,
+    border: '1px solid rgba(255,255,255,0.14)',
+    background: 'transparent',
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 15,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  signOut: {
+    display: 'inline-block',
+    marginTop: 28,
+    color: 'rgba(255,255,255,0.28)',
+    fontSize: 13,
+    textDecoration: 'none',
+  },
+  successTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 700,
+    margin: '0 0 8px',
+  },
+  muted: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 14,
+    margin: 0,
   },
 };
