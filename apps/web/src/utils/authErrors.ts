@@ -24,7 +24,9 @@ const SHARED_CODES: Record<string, string> = {
   FAILED_TO_GET_SESSION: "We couldn't confirm your session. Please try again.",
   INVALID_TOKEN: 'That link is no longer valid. Please request a new one.',
   INVALID_ORIGIN: "Sign-in isn't configured for this address. Please contact support.",
-  TOO_MANY_REQUESTS: 'Too many attempts. Please wait a moment and try again.',
+  TOO_MANY_REQUESTS: 'Too many attempts. Please wait a few minutes and try again.',
+  ACCOUNT_LOCKED:
+    'This account is temporarily locked after too many failed sign-ins. Wait a few minutes or reset your password.',
 };
 
 const SIGN_IN_CODES: Record<string, string> = {
@@ -53,7 +55,8 @@ function messageFromStatus(status: number | null | undefined): string | null {
     return 'Please verify your email before signing in, or contact support if this keeps happening.';
   if (status === 404) return 'No account found with that email. Create one to get started.';
   if (status === 422) return 'Please check the details you entered and try again.';
-  if (status === 429) return 'Too many attempts. Please wait a moment and try again.';
+  if (status === 429)
+    return 'Too many attempts. Please wait a few minutes and try again, or reset your password.';
   if (status >= 500) return 'Our server had a problem. Please try again in a moment.';
   return null;
 }
@@ -81,6 +84,10 @@ export function getFriendlyAuthError(
 
   const code = error.code ? normalizeCode(String(error.code)) : null;
   if (code && table[code]) return table[code];
+
+  if (error.message && /locked|too many attempts|rate limit|try again in/i.test(error.message)) {
+    return error.message;
+  }
 
   const fromStatus = messageFromStatus(
     typeof error.status === 'number' ? error.status : Number(error.status) || null
