@@ -2,11 +2,11 @@
 import sql from '@/app/api/utils/sql';
 import { sendEmail } from '@/app/api/utils/send-email';
 import { randomBytes, randomUUID } from 'crypto';
+import {
+  assertLoginAllowed,
+  guardDeniedResponse,
+} from '@/app/api/utils/loginProtection';
 
-/**
- * Public app origin for reset links.
- * Prefer BETTER_AUTH_URL (documented in .env.example). Never use Anything.ai leftovers.
- */
 function resolveAppUrl(request) {
   const fromEnv = (
     process.env.BETTER_AUTH_URL ||
@@ -35,7 +35,6 @@ async function findUserByEmail(email) {
   const normalized = String(email || '').trim().toLowerCase();
   if (!normalized) return null;
 
-  // Primary Crestar profile store
   try {
     const [row] = await sql`
       SELECT id, email, name, display_name
@@ -55,7 +54,6 @@ async function findUserByEmail(email) {
     console.warn('[forgot-password] auth_users lookup:', e?.message || e);
   }
 
-  // Neon Managed Auth
   try {
     const [row] = await sql`
       SELECT id, email, name
@@ -75,7 +73,6 @@ async function findUserByEmail(email) {
     console.warn('[forgot-password] neon_auth lookup:', e?.message || e);
   }
 
-  // Legacy Better Auth public.user
   try {
     const [row] = await sql`
       SELECT id, email, name, display_name
@@ -119,6 +116,12 @@ export async function POST(request) {
     const emailRaw = body?.email;
     const email = String(emailRaw || '').trim().toLowerCase();
 
+    const allowed = await assertLoginAllowed(request, {
+      email,
+      pathParts: ['forgot-password'],
+    });
+    if (!allowed.ok) return guardDeniedResponse(allowed);
+
     console.log('[forgot-password] Request for:', email || '(empty)');
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -127,8 +130,6 @@ export async function POST(request) {
 
     const user = await findUserByEmail(email);
 
-    // Privacy: always return success when the address is well-formed,
-    // but only send mail when we found an account.
     if (!user) {
       console.log('[forgot-password] No account for email (still returning success)');
       return Response.json({
@@ -142,7 +143,7 @@ export async function POST(request) {
     await ensureVerificationTable();
 
     const resetToken = randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
     await sql`DELETE FROM verification WHERE identifier = ${email}`;
     await sql`
@@ -172,7 +173,6 @@ export async function POST(request) {
     const text = `Hi ${displayName},\n\nReset your Crestar password:\n${resetUrl}\n\nThis link expires in 1 hour.\n\nIf you did not request this, ignore this email.`;
 
     try {
-      // Same path as signup verification — Resend via sendEmail / getEnvString
       await sendEmail({
         to: email,
         subject: 'Reset your Crestar password',
