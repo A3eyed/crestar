@@ -2,9 +2,10 @@
 'use client';
 import { ArrowLeft } from 'lucide-react';
 
-const LAST_UPDATED = 'October 13, 2026';
+const LAST_UPDATED = 'October 31, 2026';
 
 const SUPPORT_EMAIL = 'support@crestarhq.com';
+const DMCA_EMAIL = 'dmca@crestarhq.com';
 
 const SECTIONS = [
   {
@@ -13,7 +14,7 @@ const SECTIONS = [
   },
   {
     title: '2. Who Can Use Crestar',
-    body: `You must be at least 18 years old (or the age of majority where you live) to use Crestar, including to buy, sell, deliver, create monetized content, or receive payouts.\n\nYou are responsible for your account and everything that happens under it. Keep your password safe, and tell us immediately if you believe your account has been compromised. You may not sell, transfer, or lend your account to anyone else.`,
+    body: `You must be at least 18 years old (or the age of majority where you live) to use Crestar, including to buy, sell, deliver, create monetized content, or receive payouts. You must confirm your age when creating an account.\n\nYou are responsible for your account and everything that happens under it. Keep your password safe, and tell us immediately if you believe your account has been compromised. You may not sell, transfer, or lend your account to anyone else.`,
   },
   {
     title: '3. User Roles',
@@ -49,36 +50,37 @@ const SECTIONS = [
   },
   {
     title: '11. Notifications & Communications',
-    body: `Crestar sends you service notifications — in-app, by email, and (where enabled) by push — about activity on your account: new orders and payments, escrow releases, likes, comments, new followers, and direct messages.\n\nWe do not send marketing or promotional push notifications. If we ever introduce them, they will be opt-in only: we will ask for your explicit consent first and you will be able to withdraw it at any time without losing your order and delivery alerts.\n\nSellers automatically receive alerts when a new paid order comes in, including access to the buyer's delivery details for fulfillment.\n\nYou can manage notification preferences in Settings, and control who can message or comment on your content in Settings → Privacy Settings. Service messages essential to your transactions (such as payment confirmations) cannot be switched off while you have active orders.`,
+    body: `Crestar sends you service notifications — in-app, by email, and (where enabled) by push — about activity on your account: new orders and payments, escrow releases, likes, comments, new followers, and direct messages.\n\nWe do not send marketing or promotional push notifications by default. Marketing email, if any, is optional: you can unsubscribe at any time using the link in those messages without losing essential order and delivery alerts.\n\nSellers automatically receive alerts when a new paid order comes in, including access to the buyer's delivery details for fulfillment.\n\nYou can manage notification preferences in Settings, and control who can message or comment on your content in Settings → Privacy Settings. Service messages essential to your transactions (such as payment confirmations) cannot be switched off while you have active orders.`,
   },
   {
     title: '12. Intellectual Property',
-    body: `The Crestar name, logo, app design, and software are owned by Crestar and protected by law. You may not copy, modify, or create derivative works from them without our written permission.\n\nIf you believe content on Crestar infringes your copyright, report it via Support with details of the work and the infringing content. We review and act on valid notices, and repeat infringers lose their accounts.`,
+    body: `The Crestar name, logo, app design, and software are owned by Crestar and protected by law. You may not copy, modify, or create derivative works from them without our written permission.\n\nIf you believe content on Crestar infringes your copyright, use the DMCA process in Section 13.`,
   },
   {
-    title: '13. Disclaimers & Limitation of Liability',
+    title: '13. Copyright Complaints (DMCA)',
+    body: `Crestar respects intellectual property rights and responds to notices of alleged copyright infringement under the U.S. Digital Millennium Copyright Act (17 U.S.C. § 512) and similar laws.\n\nDesignated DMCA Agent\n• Name / Title: Copyright Agent, Crestar\n• Email: ${DMCA_EMAIL}\n• Alternate: ${SUPPORT_EMAIL} with subject line "DMCA Notice"\n• Mail: Crestar — DMCA Agent, Accra, Ghana (update with your full registered business street address)\n\nA complete DMCA notice must include:\n1. Identification of the copyrighted work claimed to be infringed\n2. Identification of the material that is claimed to be infringing, with enough detail for us to locate it (URL or user and post description)\n3. Your contact information (name, address, telephone, email)\n4. A statement that you have a good-faith belief that the use is not authorized by the copyright owner, its agent, or the law\n5. A statement that the information in the notice is accurate, and under penalty of perjury, that you are the owner or authorized to act on behalf of the owner\n6. Your physical or electronic signature\n\nUpon a valid notice we may remove or disable access to the material and notify the user who posted it. Repeat infringers may have their accounts terminated.\n\nIf your content was removed in error, you may send a counter-notice to the same agent with the information required by 17 U.S.C. § 512(g).`,
+  },
+  {
+    title: '14. Disclaimers & Limitation of Liability',
     body: `Crestar is provided "as is" and "as available". While we work hard to keep the Platform safe and reliable, we cannot guarantee it will always be uninterrupted or error-free.\n\nTo the maximum extent permitted by law:\n• We are not responsible for the quality, safety, or legality of items sold by sellers, the accuracy of listings, disputes between buyers and sellers, or items lost or damaged during delivery.\n• We are not liable for indirect, incidental, special, or consequential damages, or for loss of profits, data, or goodwill.\n• Our total liability for any claim relating to the Platform is limited to the fees you paid to Crestar in the 12 months before the claim.\n\nNothing in these Terms excludes liability that cannot be excluded by law.`,
   },
   {
-    title: '14. Suspension & Termination',
+    title: '15. Suspension & Termination',
     body: `You may stop using Crestar and delete your account at any time in Settings. Account deletion is blocked while you have wallet balance or unresolved orders — withdraw funds and complete or cancel orders first.\n\nWe may suspend or terminate your access if you breach these Terms, create risk or legal exposure for us or other users, or if required by law. Where reasonable, we will notify you first.`,
   },
   {
-    title: '15. Changes to These Terms',
+    title: '16. Changes to These Terms',
     body: `We may update these Terms as Crestar evolves. If we make material changes, we will notify you in the app or on the website before they take effect. Continuing to use the Platform after changes take effect means you accept the updated Terms.`,
   },
   {
-    title: '16. Governing Law & Contact',
-    body: `These Terms are governed by the laws of the Republic of Ghana, without regard to conflict-of-law rules, unless mandatory consumer protection law in your country of residence provides otherwise.\n\nQuestions about these Terms? Reach us any time:\n• Email: ${SUPPORT_EMAIL}\n• Support form: crestarhq.com/support\n• In-app: Settings → Support & About → Report a problem\n\nMost issues can be resolved quickly and amicably.`,
+    title: '17. Governing Law & Contact',
+    body: `These Terms are governed by the laws of the Republic of Ghana, without regard to conflict-of-law rules, unless mandatory consumer protection law in your country of residence provides otherwise.\n\nQuestions about these Terms? Reach us any time:\n• Email: ${SUPPORT_EMAIL}\n• DMCA: ${DMCA_EMAIL}\n• Support form: crestarhq.com/support\n• In-app: Settings → Support & About → Report a problem\n\nMost issues can be resolved quickly and amicably.`,
   },
 ];
-
-const ACCOUNT_AGREEMENT = 'Creating an account requires agreement to these Terms and the Privacy Policy. You may only post content you own or have permission to use. Repeat copyright infringement can close an account.';
 
 export default function TermsOfServicePage() {
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Header */}
       <div className="sticky top-0 z-50 bg-black border-b border-white/10 backdrop-blur-xl bg-opacity-95">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-4">
           <button
@@ -91,7 +93,6 @@ export default function TermsOfServicePage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-2xl mx-auto px-5 py-5 pb-24">
         <p className="text-white/60 text-sm mb-6">Last updated: {LAST_UPDATED}</p>
 
