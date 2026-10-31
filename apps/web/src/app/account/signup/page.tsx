@@ -22,6 +22,7 @@ export default function SignUpPage() {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [agreed, setAgreed] = useState(false);
+  const [isAdult, setIsAdult] = useState(false);
   const [isDark, setIsDark] = useState<boolean>(true);
   const [ready, setReady] = useState<boolean>(false);
   const [callbackUrl, setCallbackUrl] = useState<string>('/');
@@ -86,6 +87,11 @@ export default function SignUpPage() {
         return;
       }
 
+      if (!isAdult) {
+        setError('You must confirm you are at least 18 years old to create an account.');
+        return;
+      }
+
       if (!agreed) {
         setError('Agree to the Terms and Privacy Policy to create an account.');
         return;
@@ -109,11 +115,14 @@ export default function SignUpPage() {
           return;
         }
 
+        try {
+          localStorage.setItem('crestar_age_confirmed', '18+');
+        } catch {}
+
         const session = await waitForSession();
         const inWebView = isWebView || isMobileWebViewContext();
 
         if (!session) {
-          // Neon still withholding session (e.g. email verification still on upstream)
           setInfo(SIGNUP_VERIFY_EMAIL_MESSAGE);
           setLoading(false);
           window.setTimeout(() => {
@@ -122,8 +131,6 @@ export default function SignUpPage() {
           return;
         }
 
-        // Logged in — optional 6-digit verify later. App is usable immediately.
-        // Soft-prompt verify page (user can Skip).
         if (inWebView) {
           window.location.href = EXPO_SUCCESS_PATH;
           return;
@@ -132,7 +139,6 @@ export default function SignUpPage() {
         const dest = getSafeCallbackUrl(
           callbackUrl === EXPO_SUCCESS_PATH ? '/' : callbackUrl
         );
-        // Prefer optional verify UI when not deep-linking elsewhere
         if (dest === '/' || dest === '/profile') {
           window.location.href = `/account/verify-email?optional=1&callbackUrl=${encodeURIComponent(dest)}`;
         } else {
@@ -144,7 +150,7 @@ export default function SignUpPage() {
         setLoading(false);
       }
     },
-    [email, password, agreed, signUpWithCredentials, callbackUrl, isWebView, searchString]
+    [email, password, agreed, isAdult, signUpWithCredentials, callbackUrl, isWebView, searchString]
   );
 
   if (!ready) {
@@ -293,6 +299,28 @@ export default function SignUpPage() {
           >
             <input
               type="checkbox"
+              checked={isAdult}
+              onChange={(e) => {
+                setIsAdult(e.target.checked);
+                if (error) setError(null);
+              }}
+              style={{ marginTop: 2 }}
+            />
+            <span>I confirm that I am at least 18 years old.</span>
+          </label>
+
+          <label
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'flex-start',
+              color: c.subtle,
+              fontSize: 13,
+              lineHeight: 1.4,
+            }}
+          >
+            <input
+              type="checkbox"
               checked={agreed}
               onChange={(e) => {
                 setAgreed(e.target.checked);
@@ -315,7 +343,7 @@ export default function SignUpPage() {
 
           <button
             type="submit"
-            disabled={loading || !agreed}
+            disabled={loading || !agreed || !isAdult}
             style={{
               width: '100%',
               padding: '15px 16px',
@@ -326,7 +354,7 @@ export default function SignUpPage() {
               fontSize: 16,
               fontWeight: 700,
               cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1,
+              opacity: loading || !agreed || !isAdult ? 0.6 : 1,
               marginTop: 4,
             }}
           >
