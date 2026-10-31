@@ -9,7 +9,6 @@ import {
   EXPO_SUCCESS_PATH,
 } from '@/utils/authErrors';
 
-// ── Theme tokens ─────────────────────────────────────────────────────────────
 const DARK = {
   bg: '#000000',
   inputBg: 'rgba(255,255,255,0.07)',
@@ -22,6 +21,8 @@ const DARK = {
   errorBg: 'rgba(220,38,38,0.12)',
   errorBorder: 'rgba(220,38,38,0.28)',
   errorText: '#F87171',
+  socialBg: 'rgba(255,255,255,0.08)',
+  socialBorder: 'rgba(255,255,255,0.14)',
 };
 
 const LIGHT = {
@@ -36,6 +37,8 @@ const LIGHT = {
   errorBg: '#FFF0F2',
   errorBorder: 'rgba(220,38,38,0.25)',
   errorText: '#DC2626',
+  socialBg: '#F5F5F5',
+  socialBorder: '#E2E2E2',
 };
 
 function getSafeCallbackUrl(value) {
@@ -48,12 +51,13 @@ export default function SignInPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(null);
   const [callbackUrl, setCallbackUrl] = useState('/');
   const [searchString, setSearchString] = useState('');
   const [isDark, setIsDark] = useState(null);
   const [isWebView, setIsWebView] = useState(false);
 
-  const { signInWithCredentials } = useAuth();
+  const { signInWithCredentials, signInWithApple } = useAuth();
 
   useEffect(() => {
     try {
@@ -67,7 +71,6 @@ export default function SignInPage() {
 
       const message = getFriendlyAuthError(params.get('error'), 'signin');
       if (message) {
-        console.warn('⚠️ [SignIn] Error from URL params:', message);
         setError(message);
         params.delete('error');
         params.delete('code');
@@ -90,10 +93,17 @@ export default function SignInPage() {
       } catch {}
       setIsDark(dark);
     } catch (e) {
-      console.error('❌ [SignIn] Initialization error:', e);
+      console.error('[SignIn] Initialization error:', e);
       setIsDark(true);
     }
   }, []);
+
+  const resolveDestination = useCallback(() => {
+    const inWebView = isWebView || isMobileWebViewContext();
+    return inWebView
+      ? EXPO_SUCCESS_PATH
+      : getSafeCallbackUrl(callbackUrl === EXPO_SUCCESS_PATH ? '/' : callbackUrl);
+  }, [callbackUrl, isWebView]);
 
   const onSubmit = useCallback(
     async (e) => {
@@ -117,7 +127,6 @@ export default function SignInPage() {
         });
 
         if (result?.error) {
-          console.error('[SignIn] Better Auth error:', result.error);
           setError(getFriendlyAuthError(result.error, 'signin'));
           setLoading(false);
           return;
@@ -130,20 +139,33 @@ export default function SignInPage() {
           return;
         }
 
-        const inWebView = isWebView || isMobileWebViewContext();
-        const destination = inWebView
-          ? EXPO_SUCCESS_PATH
-          : getSafeCallbackUrl(callbackUrl === EXPO_SUCCESS_PATH ? '/' : callbackUrl);
-
-        window.location.href = destination;
+        window.location.href = resolveDestination();
       } catch (err) {
-        console.error('[SignIn] Unexpected error:', err);
         setError(getFriendlyAuthError(err, 'signin'));
         setLoading(false);
       }
     },
-    [email, password, signInWithCredentials, callbackUrl, isWebView]
+    [email, password, signInWithCredentials, resolveDestination]
   );
+
+  const onApple = useCallback(async () => {
+    setError(null);
+    setSocialLoading('apple');
+    try {
+      const dest = resolveDestination();
+      const result = await signInWithApple({
+        callbackURL: typeof window !== 'undefined' ? `${window.location.origin}${dest === EXPO_SUCCESS_PATH ? dest : dest}` : dest,
+      });
+      if (result?.error) {
+        setError(getFriendlyAuthError(result.error, 'signin'));
+        setSocialLoading(null);
+      }
+      // Success redirects via OAuth; no further navigation needed here.
+    } catch (err) {
+      setError(getFriendlyAuthError(err, 'signin'));
+      setSocialLoading(null);
+    }
+  }, [signInWithApple, resolveDestination]);
 
   if (isDark === null) {
     return <div style={{ minHeight: '100vh', backgroundColor: '#000' }} />;
@@ -206,6 +228,46 @@ export default function SignInPage() {
           gap: 12,
         }}
       >
+        <button
+          type="button"
+          onClick={onApple}
+          disabled={!!socialLoading || loading}
+          style={{
+            width: '100%',
+            padding: '14px 16px',
+            borderRadius: 12,
+            border: `1px solid ${t.socialBorder}`,
+            backgroundColor: isDark ? '#FFFFFF' : '#000000',
+            color: isDark ? '#000000' : '#FFFFFF',
+            fontSize: 15,
+            fontWeight: 600,
+            cursor: socialLoading ? 'not-allowed' : 'pointer',
+            opacity: socialLoading === 'apple' ? 0.7 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1 }} aria-hidden>
+            
+          </span>
+          {socialLoading === 'apple' ? 'Connecting…' : 'Continue with Apple'}
+        </button>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            margin: '4px 0',
+          }}
+        >
+          <div style={{ flex: 1, height: 1, backgroundColor: t.inputBorder }} />
+          <span style={{ color: t.textMuted, fontSize: 12 }}>or</span>
+          <div style={{ flex: 1, height: 1, backgroundColor: t.inputBorder }} />
+        </div>
+
         <form
           noValidate
           onSubmit={onSubmit}
@@ -261,7 +323,7 @@ export default function SignInPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !!socialLoading}
             style={{
               width: '100%',
               padding: '15px 16px',

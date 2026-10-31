@@ -12,8 +12,6 @@ type AuthOptions = {
   password?: string;
 };
 
-// Platform-compliant auth hook for web applications
-// Wraps Better Auth client with backward-compatible API
 function useAuth() {
   const getCallbackUrl = useCallback((options: AuthOptions = {}) => {
     const callback = options.callbackURL || options.callbackUrl;
@@ -24,8 +22,6 @@ function useAuth() {
 
   const signInWithCredentials = useCallback(
     (options: AuthOptions = {}) =>
-      // Plain Better Auth call — the pages handle navigation after success,
-      // so we never pass callbackURL or mutate the request body.
       authClient.signIn.email({
         email: options.email ?? '',
         password: options.password ?? '',
@@ -47,6 +43,16 @@ function useAuth() {
     (options: AuthOptions = {}) =>
       authClient.signIn.social({
         provider: 'google',
+        callbackURL: getCallbackUrl(options),
+      }),
+    [getCallbackUrl]
+  );
+
+  /** Neon Managed Better Auth — Apple OAuth (provider id: apple) */
+  const signInWithApple = useCallback(
+    (options: AuthOptions = {}) =>
+      authClient.signIn.social({
+        provider: 'apple',
         callbackURL: getCallbackUrl(options),
       }),
     [getCallbackUrl]
@@ -90,6 +96,7 @@ function useAuth() {
     signInWithCredentials,
     signUpWithCredentials,
     signInWithGoogle,
+    signInWithApple,
     signInWithFacebook,
     signInWithTwitter,
     signOut,
