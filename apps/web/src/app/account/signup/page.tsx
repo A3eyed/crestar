@@ -103,9 +103,7 @@ export default function SignUpPage() {
       const dest = resolveDestination();
       const result = await signInWithApple({
         callbackURL:
-          typeof window !== 'undefined'
-            ? `${window.location.origin}${dest}`
-            : dest,
+          typeof window !== 'undefined' ? `${window.location.origin}${dest}` : dest,
       });
       if (result?.error) {
         setError(getFriendlyAuthError(result.error, 'signup'));
@@ -208,44 +206,44 @@ export default function SignUpPage() {
     ? {
         bg: '#000000',
         text: '#FFFFFF',
-        subtle: 'rgba(255,255,255,0.5)',
-        inputBg: 'rgba(255,255,255,0.08)',
+        subtle: 'rgba(255,255,255,0.45)',
+        inputBg: 'rgba(255,255,255,0.07)',
         inputBorder: 'rgba(255,255,255,0.12)',
         inputText: '#FFFFFF',
-        primaryBg: '#FE2C55',
-        primaryText: '#FFFFFF',
-        errorBg: 'rgba(254,44,85,0.12)',
-        errorBorder: 'rgba(254,44,85,0.28)',
-        errorText: '#FE2C55',
-        infoBg: 'rgba(212,175,55,0.12)',
-        infoBorder: 'rgba(212,175,55,0.35)',
-        infoText: '#D4AF37',
+        primaryBg: '#FFFFFF',
+        primaryText: '#000000',
+        errorBg: 'rgba(220,38,38,0.12)',
+        errorBorder: 'rgba(220,38,38,0.28)',
+        errorText: '#F87171',
+        infoBg: 'rgba(255,255,255,0.06)',
+        infoBorder: 'rgba(255,255,255,0.14)',
+        infoText: 'rgba(255,255,255,0.85)',
         socialBg: 'rgba(255,255,255,0.08)',
-        socialBorder: 'rgba(255,255,255,0.18)',
+        socialBorder: 'rgba(255,255,255,0.16)',
         socialText: '#FFFFFF',
         divider: 'rgba(255,255,255,0.12)',
-        linkColor: '#FE2C55',
+        linkColor: '#FFFFFF',
       }
     : {
         bg: '#FFFFFF',
-        text: '#161823',
-        subtle: 'rgba(22,24,35,0.5)',
-        inputBg: '#F1F1F2',
-        inputBorder: '#E3E3E4',
-        inputText: '#161823',
-        primaryBg: '#FE2C55',
+        text: '#000000',
+        subtle: 'rgba(0,0,0,0.45)',
+        inputBg: '#F5F5F5',
+        inputBorder: '#E2E2E2',
+        inputText: '#000000',
+        primaryBg: '#000000',
         primaryText: '#FFFFFF',
-        errorBg: 'rgba(254,44,85,0.08)',
-        errorBorder: 'rgba(254,44,85,0.25)',
-        errorText: '#FE2C55',
-        infoBg: '#FFF8E6',
-        infoBorder: 'rgba(212,175,55,0.45)',
-        infoText: '#8A6D1B',
+        errorBg: '#FFF0F2',
+        errorBorder: 'rgba(220,38,38,0.25)',
+        errorText: '#DC2626',
+        infoBg: '#F5F5F5',
+        infoBorder: '#E2E2E2',
+        infoText: '#333333',
         socialBg: '#FFFFFF',
-        socialBorder: 'rgba(22,24,35,0.12)',
-        socialText: '#161823',
-        divider: 'rgba(22,24,35,0.12)',
-        linkColor: '#FE2C55',
+        socialBorder: 'rgba(0,0,0,0.12)',
+        socialText: '#000000',
+        divider: 'rgba(0,0,0,0.1)',
+        linkColor: '#000000',
       };
 
   const inputStyle = {
@@ -253,7 +251,7 @@ export default function SignUpPage() {
     boxSizing: 'border-box' as const,
     fontSize: 16,
     padding: '14px 16px',
-    borderRadius: 8,
+    borderRadius: 12,
     border: `1px solid ${c.inputBorder}`,
     backgroundColor: c.inputBg,
     color: c.inputText,
@@ -272,26 +270,25 @@ export default function SignUpPage() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '24px 20px',
-        fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       }}
     >
       <div style={{ marginBottom: 36, textAlign: 'center' }}>
         <h1
           style={{
             color: c.text,
-            fontSize: 32,
+            fontSize: 30,
             fontWeight: 800,
-            letterSpacing: '-0.02em',
+            letterSpacing: '0.2em',
             margin: 0,
           }}
         >
-          Crestar
+          CRESTAR
         </h1>
-        <p style={{ color: c.subtle, fontSize: 15, marginTop: 10 }}>Sign up for Crestar</p>
+        <p style={{ color: c.subtle, fontSize: 14, marginTop: 8 }}>Create your account</p>
       </div>
 
-      <div style={{ width: '100%', maxWidth: 375, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <button
           type="button"
           onClick={onApple}
@@ -300,7 +297,7 @@ export default function SignUpPage() {
             position: 'relative',
             width: '100%',
             height: 48,
-            borderRadius: 4,
+            borderRadius: 12,
             border: `1px solid ${c.socialBorder}`,
             backgroundColor: c.socialBg,
             color: c.socialText,
@@ -322,11 +319,11 @@ export default function SignUpPage() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
           <div style={{ flex: 1, height: 1, backgroundColor: c.divider }} />
-          <span style={{ color: c.subtle, fontSize: 13, fontWeight: 500 }}>OR</span>
+          <span style={{ color: c.subtle, fontSize: 12, fontWeight: 500 }}>or</span>
           <div style={{ flex: 1, height: 1, backgroundColor: c.divider }} />
         </div>
 
-        <form noValidate onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <form noValidate onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input
             required
             type="email"
@@ -356,23 +353,21 @@ export default function SignUpPage() {
           {error && (
             <div
               style={{
-                padding: '12px 14px',
-                borderRadius: 8,
+                padding: '11px 16px',
+                borderRadius: 10,
                 backgroundColor: c.errorBg,
                 border: `1px solid ${c.errorBorder}`,
               }}
             >
-              <p style={{ color: c.errorText, fontSize: 13, textAlign: 'center', margin: 0, fontWeight: 500 }}>
-                {error}
-              </p>
+              <p style={{ color: c.errorText, fontSize: 13, textAlign: 'center', margin: 0 }}>{error}</p>
             </div>
           )}
 
           {info && (
             <div
               style={{
-                padding: '12px 14px',
-                borderRadius: 8,
+                padding: '11px 16px',
+                borderRadius: 10,
                 backgroundColor: c.infoBg,
                 border: `1px solid ${c.infoBorder}`,
               }}
@@ -441,38 +436,29 @@ export default function SignUpPage() {
             style={{
               width: '100%',
               height: 48,
-              borderRadius: 4,
+              borderRadius: 12,
               border: 'none',
               backgroundColor: c.primaryBg,
               color: c.primaryText,
               fontSize: 16,
               fontWeight: 700,
               cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading || !agreed || !isAdult ? 0.65 : 1,
+              opacity: loading || !agreed || !isAdult ? 0.6 : 1,
               marginTop: 4,
             }}
           >
-            {loading ? 'Signing up…' : 'Sign up'}
+            {loading ? 'Creating account…' : 'Create Account'}
           </button>
         </form>
       </div>
 
-      <div
-        style={{
-          marginTop: 28,
-          textAlign: 'center',
-          padding: '16px 0',
-          borderTop: `1px solid ${c.divider}`,
-          width: '100%',
-          maxWidth: 375,
-        }}
-      >
+      <div style={{ marginTop: 28, textAlign: 'center' }}>
         <span style={{ color: c.subtle, fontSize: 14 }}>Already have an account? </span>
         <a
           href={`/account/signin${searchString}`}
           style={{ color: c.linkColor, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}
         >
-          Log in
+          Sign in
         </a>
       </div>
     </div>

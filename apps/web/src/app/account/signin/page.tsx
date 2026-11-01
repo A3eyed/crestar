@@ -11,41 +11,41 @@ import {
 
 const DARK = {
   bg: '#000000',
-  inputBg: 'rgba(255,255,255,0.08)',
+  inputBg: 'rgba(255,255,255,0.07)',
   inputBorder: 'rgba(255,255,255,0.12)',
   inputText: '#FFFFFF',
   text: '#FFFFFF',
-  textMuted: 'rgba(255,255,255,0.5)',
-  linkColor: '#FE2C55',
-  linkMuted: 'rgba(255,255,255,0.5)',
-  errorBg: 'rgba(254,44,85,0.12)',
-  errorBorder: 'rgba(254,44,85,0.28)',
-  errorText: '#FE2C55',
+  textMuted: 'rgba(255,255,255,0.45)',
+  linkColor: '#FFFFFF',
+  linkMuted: 'rgba(255,255,255,0.45)',
+  errorBg: 'rgba(220,38,38,0.12)',
+  errorBorder: 'rgba(220,38,38,0.28)',
+  errorText: '#F87171',
   socialBg: 'rgba(255,255,255,0.08)',
-  socialBorder: 'rgba(255,255,255,0.18)',
+  socialBorder: 'rgba(255,255,255,0.16)',
   socialText: '#FFFFFF',
   divider: 'rgba(255,255,255,0.12)',
-  primaryBg: '#FE2C55',
-  primaryText: '#FFFFFF',
+  primaryBg: '#FFFFFF',
+  primaryText: '#000000',
 };
 
 const LIGHT = {
   bg: '#FFFFFF',
-  inputBg: '#F1F1F2',
-  inputBorder: '#E3E3E4',
-  inputText: '#161823',
-  text: '#161823',
-  textMuted: 'rgba(22,24,35,0.5)',
-  linkColor: '#FE2C55',
-  linkMuted: 'rgba(22,24,35,0.5)',
-  errorBg: 'rgba(254,44,85,0.08)',
-  errorBorder: 'rgba(254,44,85,0.25)',
-  errorText: '#FE2C55',
+  inputBg: '#F5F5F5',
+  inputBorder: '#E2E2E2',
+  inputText: '#000000',
+  text: '#000000',
+  textMuted: 'rgba(0,0,0,0.45)',
+  linkColor: '#000000',
+  linkMuted: 'rgba(0,0,0,0.45)',
+  errorBg: '#FFF0F2',
+  errorBorder: 'rgba(220,38,38,0.25)',
+  errorText: '#DC2626',
   socialBg: '#FFFFFF',
-  socialBorder: 'rgba(22,24,35,0.12)',
-  socialText: '#161823',
-  divider: 'rgba(22,24,35,0.12)',
-  primaryBg: '#FE2C55',
+  socialBorder: 'rgba(0,0,0,0.12)',
+  socialText: '#000000',
+  divider: 'rgba(0,0,0,0.1)',
+  primaryBg: '#000000',
   primaryText: '#FFFFFF',
 };
 
@@ -196,7 +196,7 @@ export default function SignInPage() {
     boxSizing: 'border-box',
     fontSize: 16,
     padding: '14px 16px',
-    borderRadius: 8,
+    borderRadius: 12,
     border: `1px solid ${t.inputBorder}`,
     backgroundColor: t.inputBg,
     color: t.inputText,
@@ -216,37 +216,36 @@ export default function SignInPage() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '32px 20px',
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         boxSizing: 'border-box',
       }}
     >
-      <div style={{ marginBottom: 40, textAlign: 'center' }}>
+      <div style={{ marginBottom: 36, textAlign: 'center' }}>
         <h1
           style={{
             color: t.text,
-            fontSize: 32,
+            fontSize: 30,
             fontWeight: 800,
-            letterSpacing: '-0.02em',
+            letterSpacing: '0.2em',
             margin: 0,
           }}
         >
-          Crestar
+          CRESTAR
         </h1>
-        <p style={{ color: t.textMuted, fontSize: 15, margin: '10px 0 0', fontWeight: 400 }}>
-          Log in to Crestar
+        <p style={{ color: t.textMuted, fontSize: 14, margin: '8px 0 0' }}>
+          Sign in to your account
         </p>
       </div>
 
       <div
         style={{
           width: '100%',
-          maxWidth: 375,
+          maxWidth: 360,
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
         }}
       >
-        {/* TikTok-style social button: full width, icon left, label centered */}
         <button
           type="button"
           onClick={onApple}
@@ -255,7 +254,7 @@ export default function SignInPage() {
             position: 'relative',
             width: '100%',
             height: 48,
-            borderRadius: 4,
+            borderRadius: 12,
             border: `1px solid ${t.socialBorder}`,
             backgroundColor: t.socialBg,
             color: t.socialText,
@@ -266,7 +265,6 @@ export default function SignInPage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 8,
             padding: '0 16px',
           }}
         >
@@ -288,18 +286,18 @@ export default function SignInPage() {
             display: 'flex',
             alignItems: 'center',
             gap: 12,
-            margin: '8px 0',
+            margin: '4px 0',
           }}
         >
           <div style={{ flex: 1, height: 1, backgroundColor: t.divider }} />
-          <span style={{ color: t.textMuted, fontSize: 13, fontWeight: 500 }}>OR</span>
+          <span style={{ color: t.textMuted, fontSize: 12, fontWeight: 500 }}>or</span>
           <div style={{ flex: 1, height: 1, backgroundColor: t.divider }} />
         </div>
 
         <form
           noValidate
           onSubmit={onSubmit}
-          style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
         >
           <input
             required
@@ -309,7 +307,7 @@ export default function SignInPage() {
               setEmail(e.target.value);
               if (error) setError(null);
             }}
-            placeholder="Email or username"
+            placeholder="Email address"
             autoCapitalize="none"
             autoComplete="email"
             style={inputStyle}
@@ -330,8 +328,8 @@ export default function SignInPage() {
           {error && (
             <div
               style={{
-                padding: '12px 14px',
-                borderRadius: 8,
+                padding: '11px 16px',
+                borderRadius: 10,
                 backgroundColor: t.errorBg,
                 border: `1px solid ${t.errorBorder}`,
               }}
@@ -342,7 +340,6 @@ export default function SignInPage() {
                   fontSize: 13,
                   textAlign: 'center',
                   margin: 0,
-                  fontWeight: 500,
                 }}
               >
                 {error}
@@ -356,28 +353,27 @@ export default function SignInPage() {
             style={{
               width: '100%',
               height: 48,
-              borderRadius: 4,
+              borderRadius: 12,
               border: 'none',
               backgroundColor: t.primaryBg,
               color: t.primaryText,
               fontSize: 16,
               fontWeight: 700,
               cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.65 : 1,
-              marginTop: 4,
+              opacity: loading ? 0.6 : 1,
+              marginTop: 2,
             }}
           >
-            {loading ? 'Logging in…' : 'Log in'}
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
 
-          <div style={{ textAlign: 'center', marginTop: 4 }}>
+          <div style={{ textAlign: 'center', marginTop: 2 }}>
             <a
               href="/account/forgot-password"
               style={{
                 color: t.linkMuted,
-                fontSize: 14,
+                fontSize: 13,
                 textDecoration: 'none',
-                fontWeight: 500,
               }}
             >
               Forgot password?
@@ -386,17 +382,8 @@ export default function SignInPage() {
         </form>
       </div>
 
-      <div
-        style={{
-          marginTop: 32,
-          textAlign: 'center',
-          padding: '16px 0',
-          borderTop: `1px solid ${t.divider}`,
-          width: '100%',
-          maxWidth: 375,
-        }}
-      >
-        <span style={{ color: t.textMuted, fontSize: 14 }}>Don't have an account? </span>
+      <div style={{ marginTop: 28, textAlign: 'center' }}>
+        <span style={{ color: t.linkMuted, fontSize: 14 }}>Don't have an account? </span>
         <a
           href={`/account/signup${searchString}`}
           style={{
