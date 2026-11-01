@@ -161,7 +161,7 @@ export default function SignInPage() {
         setLoading(false);
       }
     },
-    [email, password, signInWithCredentials, resolveDestination]
+    [email, password, signInWithCredentials, resolveDestination],
   );
 
   const onApple = useCallback(async () => {
@@ -169,16 +169,34 @@ export default function SignInPage() {
     setSocialLoading('apple');
     try {
       const dest = resolveDestination();
+      // Relative path only — useAuth builds a same-origin absolute callbackURL
       const result = await signInWithApple({
-        callbackURL:
-          typeof window !== 'undefined'
-            ? `${window.location.origin}${dest === EXPO_SUCCESS_PATH ? dest : dest}`
-            : dest,
+        callbackURL: dest === EXPO_SUCCESS_PATH ? dest : dest || '/',
       });
+
+      // If we still have a result, navigation did not leave the page
       if (result?.error) {
-        setError(getFriendlyAuthError(result.error, 'signin'));
+        setError(
+          getFriendlyAuthError(result.error, 'signin') ||
+            result.error.message ||
+            'Apple sign-in failed. Please try again.',
+        );
         setSocialLoading(null);
+        return;
       }
+
+      // Safety net: if still here after 8s, surface an error
+      window.setTimeout(() => {
+        setSocialLoading((current) => {
+          if (current === 'apple') {
+            setError(
+              'Apple sign-in is taking too long. Confirm the Services ID return URL is set to the Neon callback, then try again.',
+            );
+            return null;
+          }
+          return current;
+        });
+      }, 8000);
     } catch (err) {
       setError(getFriendlyAuthError(err, 'signin'));
       setSocialLoading(null);
