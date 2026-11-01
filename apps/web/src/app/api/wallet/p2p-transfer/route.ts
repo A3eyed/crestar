@@ -1,74 +1,82 @@
 // @ts-nocheck
-import sql from "@/app/api/utils/sql";
-import { auth } from "@/auth";
+import sql from '@/app/api/utils/sql';
+import { resolveUserId } from '@/app/api/utils/auth';
+
+const MIN_AMOUNT = 0.01;
+const MAX_AMOUNT = 50000; // hard ceiling per transfer (GHS)
 
 // P2P Transfer between @usernames with zero fees
 export async function POST(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const senderUserId = await resolveUserId(request);
+    if (!senderUserId) {
       return Response.json(
-        { error: "Unauthorized - Please sign in" },
+        { error: 'Unauthorized - Please sign in' },
         { status: 401 },
       );
     }
 
-    const senderUserId = session.user.id.toString();
     const body = await request.json();
     const { recipientUsername, amount, message } = body;
 
-    // Validate inputs
-    if (!recipientUsername || !recipientUsername.trim()) {
+    if (!recipientUsername || !String(recipientUsername).trim()) {
       return Response.json(
         { error: "Please enter the recipient's username" },
         { status: 400 },
       );
     }
 
-    if (!amount || amount <= 0) {
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       return Response.json(
-        { error: "Please enter a valid amount" },
+        { error: 'Please enter a valid amount' },
         { status: 400 },
       );
     }
 
-    if (amount < 0.01) {
+    if (parsedAmount < MIN_AMOUNT) {
       return Response.json(
-        { error: "Minimum transfer amount is GH₵ 0.01" },
+        { error: `Minimum transfer amount is GH₵ ${MIN_AMOUNT}` },
         { status: 400 },
       );
     }
 
-    // Clean username (remove @ if present)
-    const cleanUsername = recipientUsername.replace(/^@/, "").toLowerCase();
+    if (parsedAmount > MAX_AMOUNT) {
+      return Response.json(
+        { error: `Maximum transfer amount is GH₵ ${MAX_AMOUNT.toLocaleString()}` },
+        { status: 400 },
+      );
+    }
 
-    // Get sender's identity and wallet
+    // Round to 2 decimal places (money)
+    const transferAmount = Math.round(parsedAmount * 100) / 100;
+
+    const cleanUsername = String(recipientUsername).replace(/^@/, '').toLowerCase().trim();
+    if (!/^[a-z0-9._]{2,32}$/.test(cleanUsername)) {
+      return Response.json({ error: 'Invalid username' }, { status: 400 });
+    }
+
     const senderResult = await sql`
       SELECT identity_id, username FROM auth_users WHERE id = ${senderUserId} LIMIT 1
     `;
 
     if (!senderResult.length) {
-      return Response.json(
-        { error: "Sender account not found" },
-        { status: 404 },
-      );
+      return Response.json({ error: 'Sender account not found' }, { status: 404 });
     }
 
     const senderIdentityId = senderResult[0].identity_id;
     const senderUsername = senderResult[0].username;
 
-    // Prevent self-transfer
     if (senderUsername?.toLowerCase() === cleanUsername) {
       return Response.json(
-        { error: "You cannot transfer money to yourself" },
+        { error: 'You cannot transfer money to yourself' },
         { status: 400 },
       );
     }
 
-    // Get recipient's identity
     const recipientResult = await sql`
-      SELECT id, identity_id, username FROM auth_users 
-      WHERE LOWER(username) = ${cleanUsername} 
+      SELECT id, identity_id, username FROM auth_users
+      WHERE LOWER(username) = ${cleanUsername}
       LIMIT 1
     `;
 
@@ -82,237 +90,184 @@ export async function POST(request) {
     const recipientIdentityId = recipientResult[0].identity_id;
     const recipientUserId = recipientResult[0].id.toString();
 
-    // Ensure both users have wallet accounts
     await sql`
       INSERT INTO wallet_accounts (identity_id, account_type, currency, actual_balance, pending_balance)
-      VALUES 
+      VALUES
         (${senderIdentityId}, 'personal', 'GHS', 0, 0),
         (${recipientIdentityId}, 'personal', 'GHS', 0, 0)
       ON CONFLICT (identity_id) DO NOTHING
     `;
 
-    // Get sender's wallet balance
     const senderWallet = await sql`
-      SELECT id, actual_balance, pending_balance 
-      FROM wallet_accounts 
-      WHERE identity_id = ${senderIdentityId} 
+      SELECT id, actual_balance, pending_balance
+      FROM wallet_accounts
+      WHERE identity_id = ${senderIdentityId}
       LIMIT 1
     `;
 
     if (!senderWallet.length) {
-      return Response.json(
-        { error: "Sender wallet not found" },
-        { status: 404 },
-      );
+      return Response.json({ error: 'Sender wallet not found' }, { status: 404 });
+    }
+
+    const recipientWallet = await sql`
+      SELECT id, actual_balance, pending_balance
+      FROM wallet_accounts
+      WHERE identity_id = ${recipientIdentityId}
+      LIMIT 1
+    `;
+
+    if (!recipientWallet.length) {
+      return Response.json({ error: 'Recipient wallet not found' }, { status: 404 });
     }
 
     const senderWalletId = senderWallet[0].id;
+    const recipientWalletId = recipientWallet[0].id;
     const senderCurrentBalance = parseFloat(senderWallet[0].actual_balance);
+    const recipientCurrentBalance = parseFloat(recipientWallet[0].actual_balance);
 
-    // Check if sender has sufficient balance
-    if (senderCurrentBalance < amount) {
+    if (senderCurrentBalance < transferAmount) {
       return Response.json(
         {
-          error: `Insufficient balance. You have GH₵${senderCurrentBalance.toFixed(2)} but need GH₵${amount.toFixed(2)}`,
+          error: `Insufficient balance. You have GH₵${senderCurrentBalance.toFixed(2)} but need GH₵${transferAmount.toFixed(2)}`,
         },
         { status: 400 },
       );
     }
 
-    // Get recipient's wallet
-    const recipientWallet = await sql`
-      SELECT id, actual_balance, pending_balance 
-      FROM wallet_accounts 
-      WHERE identity_id = ${recipientIdentityId} 
-      LIMIT 1
+    const transferReference = `P2P-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+    // Atomic debit: only succeeds if balance is still sufficient (prevents race double-spend)
+    const [debited] = await sql`
+      UPDATE wallet_accounts
+      SET actual_balance = actual_balance - ${transferAmount},
+          updated_at = now()
+      WHERE id = ${senderWalletId}
+        AND actual_balance >= ${transferAmount}
+      RETURNING actual_balance
     `;
 
-    if (!recipientWallet.length) {
+    if (!debited) {
       return Response.json(
-        { error: "Recipient wallet not found" },
-        { status: 404 },
+        { error: 'Insufficient balance or concurrent transfer. Please try again.' },
+        { status: 409 },
       );
     }
 
-    const recipientWalletId = recipientWallet[0].id;
-    const recipientCurrentBalance = parseFloat(
-      recipientWallet[0].actual_balance,
-    );
+    const senderNewBalance = parseFloat(debited.actual_balance);
 
-    // Calculate new balances
-    const senderNewBalance = senderCurrentBalance - amount;
-    const recipientNewBalance = recipientCurrentBalance + amount;
+    const [credited] = await sql`
+      UPDATE wallet_accounts
+      SET actual_balance = actual_balance + ${transferAmount},
+          updated_at = now()
+      WHERE id = ${recipientWalletId}
+      RETURNING actual_balance
+    `;
 
-    const transferReference = `P2P-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const recipientNewBalance = parseFloat(credited?.actual_balance ?? recipientCurrentBalance + transferAmount);
 
-    // Perform the transfer in a transaction
-    const transferResult = await sql.transaction([
-      // Deduct from sender
-      sql`
-        UPDATE wallet_accounts 
-        SET actual_balance = ${senderNewBalance}, updated_at = now()
-        WHERE id = ${senderWalletId}
-      `,
-      // Add to recipient
-      sql`
-        UPDATE wallet_accounts 
-        SET actual_balance = ${recipientNewBalance}, updated_at = now()
-        WHERE id = ${recipientWalletId}
-      `,
-      // Record sender's transaction (outgoing)
-      sql`
-        INSERT INTO crestar_wallet_transactions (
-          wallet_account_id,
-          transaction_type,
-          amount,
-          currency,
-          actual_balance_before,
-          actual_balance_after,
-          pending_balance_before,
-          pending_balance_after,
-          reference,
-          description,
-          metadata,
-          related_user_id,
-          status,
-          created_at,
-          completed_at
-        ) VALUES (
-          ${senderWalletId},
-          'p2p_transfer_out',
-          ${amount},
-          'GHS',
-          ${senderCurrentBalance},
-          ${senderNewBalance},
-          ${senderWallet[0].pending_balance},
-          ${senderWallet[0].pending_balance},
-          ${transferReference},
-          ${`Sent to @${cleanUsername}${message ? `: ${message}` : ""}`},
-          ${JSON.stringify({
-            recipient_username: cleanUsername,
-            message: message || null,
-            transfer_type: "p2p_send",
-          })},
-          ${recipientUserId},
-          'completed',
-          now(),
-          now()
-        )
-      `,
-      // Record recipient's transaction (incoming)
-      sql`
-        INSERT INTO crestar_wallet_transactions (
-          wallet_account_id,
-          transaction_type,
-          amount,
-          currency,
-          actual_balance_before,
-          actual_balance_after,
-          pending_balance_before,
-          pending_balance_after,
-          reference,
-          description,
-          metadata,
-          related_user_id,
-          status,
-          created_at,
-          completed_at
-        ) VALUES (
-          ${recipientWalletId},
-          'p2p_transfer_in',
-          ${amount},
-          'GHS',
-          ${recipientCurrentBalance},
-          ${recipientNewBalance},
-          ${recipientWallet[0].pending_balance},
-          ${recipientWallet[0].pending_balance},
-          ${transferReference},
-          ${`Received from @${senderUsername}${message ? `: ${message}` : ""}`},
-          ${JSON.stringify({
-            sender_username: senderUsername,
-            message: message || null,
-            transfer_type: "p2p_receive",
-          })},
-          ${senderUserId},
-          'completed',
-          now(),
-          now()
-        )
-      `,
-      // Record the P2P payment in the dedicated table
-      sql`
-        INSERT INTO p2p_payments (
-          sender_identity_id,
-          receiver_identity_id,
-          amount,
-          currency,
-          message,
-          status,
-          created_at,
-          completed_at
-        ) VALUES (
-          ${senderIdentityId},
-          ${recipientIdentityId},
-          ${amount},
-          'GHS',
-          ${message || null},
-          'completed',
-          now(),
-          now()
-        )
-      `,
-    ]);
+    await sql`
+      INSERT INTO crestar_wallet_transactions (
+        wallet_account_id, transaction_type, amount, currency,
+        actual_balance_before, actual_balance_after,
+        pending_balance_before, pending_balance_after,
+        reference, description, metadata, related_user_id,
+        status, created_at, completed_at
+      ) VALUES (
+        ${senderWalletId}, 'p2p_transfer_out', ${transferAmount}, 'GHS',
+        ${senderCurrentBalance}, ${senderNewBalance},
+        ${senderWallet[0].pending_balance}, ${senderWallet[0].pending_balance},
+        ${transferReference},
+        ${`Sent to @${cleanUsername}${message ? `: ${String(message).slice(0, 200)}` : ''}`},
+        ${JSON.stringify({
+          recipient_username: cleanUsername,
+          message: message ? String(message).slice(0, 200) : null,
+          transfer_type: 'p2p_send',
+        })},
+        ${recipientUserId},
+        'completed', now(), now()
+      )
+    `;
+
+    await sql`
+      INSERT INTO crestar_wallet_transactions (
+        wallet_account_id, transaction_type, amount, currency,
+        actual_balance_before, actual_balance_after,
+        pending_balance_before, pending_balance_after,
+        reference, description, metadata, related_user_id,
+        status, created_at, completed_at
+      ) VALUES (
+        ${recipientWalletId}, 'p2p_transfer_in', ${transferAmount}, 'GHS',
+        ${recipientCurrentBalance}, ${recipientNewBalance},
+        ${recipientWallet[0].pending_balance}, ${recipientWallet[0].pending_balance},
+        ${transferReference},
+        ${`Received from @${senderUsername}${message ? `: ${String(message).slice(0, 200)}` : ''}`},
+        ${JSON.stringify({
+          sender_username: senderUsername,
+          message: message ? String(message).slice(0, 200) : null,
+          transfer_type: 'p2p_receive',
+        })},
+        ${senderUserId},
+        'completed', now(), now()
+      )
+    `;
+
+    await sql`
+      INSERT INTO p2p_payments (
+        sender_identity_id, receiver_identity_id, amount, currency,
+        message, status, created_at, completed_at
+      ) VALUES (
+        ${senderIdentityId}, ${recipientIdentityId}, ${transferAmount}, 'GHS',
+        ${message ? String(message).slice(0, 200) : null},
+        'completed', now(), now()
+      )
+    `;
 
     return Response.json({
       success: true,
-      message: `Successfully sent GH₵${amount.toFixed(2)} to @${cleanUsername}`,
+      message: `Successfully sent GH₵${transferAmount.toFixed(2)} to @${cleanUsername}`,
       transfer: {
         reference: transferReference,
-        amount,
+        amount: transferAmount,
         recipient: cleanUsername,
         sender_new_balance: senderNewBalance,
-        message: message || null,
+        message: message ? String(message).slice(0, 200) : null,
       },
     });
   } catch (error) {
-    console.error("P2P transfer error:", error);
+    console.error('P2P transfer error:', error);
     return Response.json(
-      { error: "Failed to process transfer. Please try again." },
+      { error: 'Failed to process transfer. Please try again.' },
       { status: 500 },
     );
   }
 }
 
-// Get P2P transfer history
 export async function GET(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const userId = await resolveUserId(request);
+    if (!userId) {
       return Response.json(
-        { error: "Unauthorized - Please sign in" },
+        { error: 'Unauthorized - Please sign in' },
         { status: 401 },
       );
     }
 
-    const userId = session.user.id.toString();
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get("limit") || "20");
-    const offset = parseInt(searchParams.get("offset") || "0");
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10) || 20, 1), 100);
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0);
 
-    // Get user's identity_id
     const userResult = await sql`
       SELECT identity_id FROM auth_users WHERE id = ${userId} LIMIT 1
     `;
 
     if (!userResult.length) {
-      return Response.json({ error: "User not found" }, { status: 404 });
+      return Response.json({ error: 'User not found' }, { status: 404 });
     }
 
     const identityId = userResult[0].identity_id;
 
-    // Get P2P transfer history
     const transfers = await sql`
-      SELECT 
+      SELECT
         p2p.*,
         sender.username as sender_username,
         receiver.username as receiver_username,
@@ -350,9 +305,9 @@ export async function GET(request) {
 
     return Response.json({ transfers: formattedTransfers });
   } catch (error) {
-    console.error("Get P2P transfers error:", error);
+    console.error('Get P2P transfers error:', error);
     return Response.json(
-      { error: "Failed to get transfer history" },
+      { error: 'Failed to get transfer history' },
       { status: 500 },
     );
   }
