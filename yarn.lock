@@ -13085,13 +13085,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"expo-file-system@npm:~57.0.0, expo-file-system@npm:~57.0.7":
+"expo-file-system@npm:~57.0.7":
   version: 57.0.7
   resolution: "expo-file-system@npm:57.0.7"
   peerDependencies:
     expo: "*"
     react-native: "*"
   checksum: 10c0/ca02903e7b918f2b73f9f009d13e2f3f2eda46b04d479af770385c463631feb843f6a742c34a75ad7e892862dfb4b4311fa0520d7599a9f01e478014b105d3b0
+  languageName: node
+  linkType: hard
+
+"expo-file-system@npm:~58.0.13":
+  version: 58.0.13
+  resolution: "expo-file-system@npm:58.0.13"
+  peerDependencies:
+    expo: "*"
+    react-native: "*"
+  checksum: 10c0/e68fb7b8ee0b99c0683037f9754e90d176bcfae4ce823f3e2c1fcede9cebf4428a420e529c870b10af3e6b3a2160933b652b700ca68d57f08960512764868c66
   languageName: node
   linkType: hard
 
@@ -16722,7 +16732,7 @@ __metadata:
     expo-contacts: "npm:~57.0.0"
     expo-device: "npm:~57.0.0"
     expo-document-picker: "npm:~57.0.0"
-    expo-file-system: "npm:~57.0.0"
+    expo-file-system: "npm:~58.0.13"
     expo-font: "npm:~57.0.0"
     expo-glass-effect: "npm:~57.0.0"
     expo-haptics: "npm:~57.0.0"
