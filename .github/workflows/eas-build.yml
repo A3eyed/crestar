@@ -8,12 +8,12 @@ on:
       platform:
         description: 'Platform to build'
         required: true
-        default: all
+        default: ios
         type: choice
         options:
-          - all
           - ios
           - android
+          - all
 
 jobs:
   build:
@@ -28,14 +28,16 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Require EXPO_TOKEN
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
-            echo "EXPO_TOKEN secret is missing. Add it under repo Settings → Secrets."
+            echo "EXPO_TOKEN secret is missing."
+            echo "Create an Expo access token at https://expo.dev/settings/access-tokens"
+            echo "with access to the Crestar project, then add it as repo secret EXPO_TOKEN."
             exit 1
           fi
 
@@ -44,6 +46,31 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Verify Expo identity and project access
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_BUILD_NO_EXPO_GO_WARNING: "true"
+        run: |
+          set -e
+          echo "=== eas whoami ==="
+          eas whoami || {
+            echo "EXPO_TOKEN is invalid or expired. Create a new token and update the secret."
+            exit 1
+          }
+          echo "=== Project id from app.json ==="
+          node -e "const a=require('./app.json'); console.log(a.expo?.extra?.eas?.projectId||'MISSING')"
+          echo "=== eas project:info (fails if token cannot READ this app) ==="
+          eas project:info || {
+            echo ""
+            echo "ERROR: This EXPO_TOKEN cannot access EAS project 0e7ed2f7-a8a4-4d5c-86c2-951536c05e3e"
+            echo "Fix:"
+            echo "  1. Open https://expo.dev and sign in as the account that owns Crestar"
+            echo "  2. Project Settings → Access → grant the robot/account Build + Read"
+            echo "  3. Or create a new token from that owner account and set GitHub secret EXPO_TOKEN"
+            exit 1
+          }
 
       - name: Install dependencies
         run: |
@@ -55,6 +82,9 @@ jobs:
           YARN_ENABLE_IMMUTABLE_INSTALLS: "false"
 
       - name: Build
-        run: eas build --platform ${{ inputs.platform }} --profile production --non-interactive
+        working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_BUILD_NO_EXPO_GO_WARNING: "true"
+        run: |
+          eas build --platform ${{ inputs.platform }} --profile production --non-interactive
