@@ -28,7 +28,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # eas-cli latest pulls @oclif/plugin-autocomplete which requires Node >= 22
+          node-version: 22
 
       - name: Require EXPO_TOKEN
         env:
@@ -46,6 +47,7 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
 
       - name: Verify Expo identity and project access
         working-directory: apps/mobile
@@ -67,7 +69,7 @@ jobs:
             echo "ERROR: This EXPO_TOKEN cannot access EAS project 0e7ed2f7-a8a4-4d5c-86c2-951536c05e3e"
             echo "Fix:"
             echo "  1. Open https://expo.dev and sign in as the account that owns Crestar"
-            echo "  2. Project Settings → Access → grant the robot/account Build + Read"
+            echo "  2. Project Settings → Access → grant the robot/account Admin or Developer"
             echo "  3. Or create a new token from that owner account and set GitHub secret EXPO_TOKEN"
             exit 1
           }
