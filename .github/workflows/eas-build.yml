@@ -49,7 +49,7 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
           packager: npm
 
-      - name: Verify Expo identity and project access
+      - name: Verify Expo identity
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -57,22 +57,9 @@ jobs:
         run: |
           set -e
           echo "=== eas whoami ==="
-          eas whoami || {
-            echo "EXPO_TOKEN is invalid or expired. Create a new token and update the secret."
-            exit 1
-          }
+          eas whoami
           echo "=== Project id from app.json ==="
-          node -e "const a=require('./app.json'); console.log(a.expo?.extra?.eas?.projectId||'MISSING')"
-          echo "=== eas project:info (fails if token cannot READ this app) ==="
-          eas project:info || {
-            echo ""
-            echo "ERROR: This EXPO_TOKEN cannot access EAS project 0e7ed2f7-a8a4-4d5c-86c2-951536c05e3e"
-            echo "Fix:"
-            echo "  1. Open https://expo.dev and sign in as the account that owns Crestar"
-            echo "  2. Project Settings → Access → grant the robot/account Admin or Developer"
-            echo "  3. Or create a new token from that owner account and set GitHub secret EXPO_TOKEN"
-            exit 1
-          }
+          node -e "const a=require('./app.json'); const id=a.expo?.extra?.eas?.projectId; if(!id){console.error('MISSING projectId'); process.exit(1)}; console.log(id)"
 
       - name: Install dependencies
         run: |
@@ -82,6 +69,20 @@ jobs:
         working-directory: .
         env:
           YARN_ENABLE_IMMUTABLE_INSTALLS: "false"
+
+      # project:info needs node_modules (resolves expo-router plugin)
+      - name: Verify EAS project access
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_BUILD_NO_EXPO_GO_WARNING: "true"
+        run: |
+          set -e
+          eas project:info || {
+            echo ""
+            echo "ERROR: Cannot read EAS project. Check EXPO_TOKEN access on project 0e7ed2f7-a8a4-4d5c-86c2-951536c05e3e"
+            exit 1
+          }
 
       - name: Build
         working-directory: apps/mobile
