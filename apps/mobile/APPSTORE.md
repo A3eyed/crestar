@@ -1,28 +1,19 @@
 # App Store / EAS
 
 - Bundle id: `com.crestar.hq`
-- EAS project id: `0e7ed2f7-a8a4-4d5c-86c2-951536c05e3e`
+- EAS project id: `b341ed25-1eb0-4fe4-8515-01f12cc4da20` (`@a3eyed/crestar`)
 - Marketing version: see `app.json` → `expo.version` (build number auto-increments on EAS)
 
-## Why the Oct 2026 workflow failed
+## Project id mismatch (fixed Nov 2026)
 
-```
-Entity not authorized: AppEntity[0e7ed2f7-...] (viewer = RobotViewerContext[...], action = READ)
-```
+GitHub was linked to Expo project `b341ed25-…` while `app.json` still had an older id.
+`extra.eas.projectId` must match the project that owns the GitHub connection.
 
-The GitHub secret `EXPO_TOKEN` is a robot token that **cannot read** this EAS app.
+## Local / dashboard build
 
-### Fix (required before CI builds succeed)
-
-1. Sign in at https://expo.dev as the **owner** of the Crestar project.
-2. Create a new access token: https://expo.dev/settings/access-tokens  
-   (Account-wide token from the owner is simplest.)
-3. GitHub → repo **crestar** → Settings → Secrets and variables → Actions  
-   → update secret **`EXPO_TOKEN`** with the new token.
-4. Optional: Project → Settings → Credentials / Access — confirm the account has Developer or Admin.
-5. Re-run workflow **EAS Production Builds** with platform `ios`.
-
-## Local build (if CI token is not ready)
+1. Builds: https://expo.dev/accounts/a3eyed/projects/crestar/builds
+2. Use profile **production**, platform **iOS**, base directory **apps/mobile** if prompted.
+3. Or from a machine with Node:
 
 ```bash
 cd apps/mobile
