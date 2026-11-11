@@ -5,9 +5,9 @@
     "apps/*"
   ],
   "scripts": {
-    "brand:decode": "node scripts/decode-brand-assets.mjs",
-    "postinstall": "node scripts/decode-brand-assets.mjs",
-    "eas-build-pre-install": "corepack enable && corepack prepare yarn@4.12.0 --activate && node scripts/decode-brand-assets.mjs"
+    "brand:decode": "node scripts/decode-brand-assets.mjs && node apps/mobile/scripts/fix-mobile-pngs.js",
+    "postinstall": "node scripts/decode-brand-assets.mjs && node apps/mobile/scripts/fix-mobile-pngs.js",
+    "eas-build-pre-install": "corepack enable && corepack prepare yarn@4.12.0 --activate && node scripts/decode-brand-assets.mjs && node apps/mobile/scripts/fix-mobile-pngs.js"
   },
   "resolutions": {
     "react-native": "0.86.3",
