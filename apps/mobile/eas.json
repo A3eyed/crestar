@@ -37,8 +37,7 @@
   "submit": {
     "production": {
       "ios": {
-        "appleTeamId": "${APPLE_TEAM_ID}",
-        "ascAppId": "${ASC_APP_ID}"
+        "appleTeamId": "H2TL9Q9HNU"
       }
     }
   }
