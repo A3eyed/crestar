@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           # eas-cli latest pulls @oclif/plugin-autocomplete which requires Node >= 22
           node-version: 22
