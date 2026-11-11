@@ -80,7 +80,7 @@ jobs:
           set -e
           eas project:info || {
             echo ""
-            echo "ERROR: Cannot read EAS project. Check EXPO_TOKEN access on project 0e7ed2f7-a8a4-4d5c-86c2-951536c05e3e"
+            echo "ERROR: Cannot read EAS project. Check EXPO_TOKEN access on project b341ed25-1eb0-4fe4-8515-01f12cc4da20"
             exit 1
           }
 
