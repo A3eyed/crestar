@@ -1,8 +1,7 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('node:path');
 const fs = require('node:fs');
-// ✅ FIXED: metro-cache is bundled with Metro which is installed via expo
-// No separate package needed
+// metro-cache is bundled with Metro (via expo)
 const { FileStore } = require('metro-cache');
 const { reportErrorToRemote } = require('./__create/report-error-to-remote');
 const {
@@ -162,6 +161,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 };
 
 const cacheDir = path.join(__dirname, 'caches');
+fs.mkdirSync(cacheDir, { recursive: true });
 
 config.cacheStores = () => [
   new FileStore({
@@ -169,7 +169,6 @@ config.cacheStores = () => [
   }),
 ];
 config.resetCache = false;
-config.fileMapCacheDirectory = cacheDir;
 config.reporter = {
   ...config.reporter,
   update: (event) => {
@@ -189,19 +188,6 @@ config.reporter = {
       }
     }
     return event;
-  },
-};
-
-const originalGetTransformOptions = config.transformer.getTransformOptions;
-
-config.transformer = {
-  ...config.transformer,
-  getTransformOptions: async (entryPoints, options) => {
-    if (options.dev === false) {
-      fs.rmSync(cacheDir, { recursive: true, force: true });
-      fs.mkdirSync(cacheDir);
-    }
-    return await originalGetTransformOptions(entryPoints, options);
   },
 };
 
