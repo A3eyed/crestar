@@ -2,7 +2,6 @@ import type { ImageProps } from 'expo-image';
 import * as ExpoImage from 'expo-image';
 import { Buffer } from 'buffer';
 import React, { forwardRef, useState, useEffect, useCallback, useRef } from 'react';
-import { Platform } from 'react-native';
 
 function buildGridPlaceholder(w: number, h: number): string {
   const size = Math.max(w, h);
@@ -76,11 +75,8 @@ const WrappedImage = forwardRef<ExpoImage.Image, ImageProps>(function WrappedIma
       const width = finalStyle?.width ?? 128;
       const height = finalStyle?.height ?? 128;
 
-      if (Platform.OS === 'web') {
-        setFallbackSource({ uri: buildGridPlaceholder(width, height) });
-      } else {
-        setFallbackSource(require('../../src/__create/placeholder.svg'));
-      }
+      // data URI works on native and web; avoid missing placeholder.svg asset
+      setFallbackSource({ uri: buildGridPlaceholder(width, height) });
     },
     [source, fallbackSource, onError, style]
   );
