@@ -13012,14 +13012,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"expo-clipboard@npm:~57.0.0":
-  version: 57.0.2
-  resolution: "expo-clipboard@npm:57.0.2"
+"expo-clipboard@npm:~58.0.4":
+  version: 58.0.4
+  resolution: "expo-clipboard@npm:58.0.4"
   peerDependencies:
     expo: "*"
     react: "*"
     react-native: "*"
-  checksum: 10c0/3cc041aeb53d09214f6eb70bb861737c6858323e621cb349ef07eaa5b2fca71432094e748db557f8bf47f318ac3c63fc1ccb9c66732f1026b923fb7e309eef73
+  checksum: 10c0/471318371415ac8a5153e224603d3ec8506c07cf02e2afb4eb544aa172df4f43f47ff1a12bf449ea246ff283f59c0c8e008561b66c1138fa09aa432283c2d78b
   languageName: node
   linkType: hard
 
@@ -16717,7 +16717,7 @@ __metadata:
     expo-build-properties: "npm:~57.0.0"
     expo-calendar: "npm:~57.0.0"
     expo-camera: "npm:~57.0.0"
-    expo-clipboard: "npm:~57.0.0"
+    expo-clipboard: "npm:~58.0.4"
     expo-constants: "npm:~57.0.0"
     expo-contacts: "npm:~57.0.0"
     expo-device: "npm:~57.0.0"
