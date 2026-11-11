@@ -5,16 +5,6 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
-    "autolinking": {
-      "exclude": [
-        "react-native-maps",
-        "@shopify/react-native-skia",
-        "react-native-graph",
-        "@react-native-community/slider",
-        "@react-native-picker/picker",
-        "react-native-google-mobile-ads"
-      ]
-    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
