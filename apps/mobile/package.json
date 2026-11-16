@@ -5,6 +5,7 @@
   "main": "index",
   "scripts": {
     "eas-build-pre-install": "corepack enable && corepack prepare yarn@4.12.0 --activate && node ./scripts/fix-mobile-pngs.js",
+    "eas-build-post-install": "node ./scripts/patch-rnsvg-image.js",
     "start": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android"
