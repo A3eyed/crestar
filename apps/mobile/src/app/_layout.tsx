@@ -2,6 +2,7 @@
 import { useAuth } from "@/utils/auth/useAuth";
 import { AuthModal } from "@/utils/auth/useAuthModal";
 import { ErrorBoundary } from "@/__create/ErrorBoundary";
+import { ScreenViewTracker } from "@/__create/analytics";
 import { Stack, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, useState } from "react";
@@ -98,6 +99,7 @@ export default function RootLayout() {
         <GestureHandlerRootView
           style={{ flex: 1, backgroundColor: colors.background }}
         >
+          <ScreenViewTracker />
           <CurrencyRateRefresher />
           <Stack
             screenOptions={{
