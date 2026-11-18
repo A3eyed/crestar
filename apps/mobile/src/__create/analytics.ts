@@ -33,8 +33,19 @@ function getVisitorId() {
   return visitorIdPromise;
 }
 
+/**
+ * Must be rendered under expo-router (inside src/app/_layout), never as a
+ * sibling of the root App entry — usePathname requires navigation context.
+ */
 export function ScreenViewTracker() {
-  const pathname = usePathname();
+  let pathname = "";
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    pathname = usePathname() || "";
+  } catch {
+    // Outside navigation context — no-op rather than crash the process.
+    return null;
+  }
 
   useEffect(() => {
     if (!isActive()) return;
