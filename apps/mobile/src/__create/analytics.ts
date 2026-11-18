@@ -34,18 +34,11 @@ function getVisitorId() {
 }
 
 /**
- * Must be rendered under expo-router (inside src/app/_layout), never as a
- * sibling of the root App entry — usePathname requires navigation context.
+ * Mount only under expo-router (src/app/_layout). Do not place in App.tsx
+ * outside NavigationContainer — that crashes on launch in production.
  */
 export function ScreenViewTracker() {
-  let pathname = "";
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    pathname = usePathname() || "";
-  } catch {
-    // Outside navigation context — no-op rather than crash the process.
-    return null;
-  }
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!isActive()) return;
